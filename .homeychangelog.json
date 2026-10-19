@@ -1,4 +1,8 @@
 {
+  "1.1.0": {
+    "en": "Automatically identify new birds using the manual Identify request, including free accounts. Adds an identified-bird Flow trigger and species in the device and widget. Separates feeders and retries pending identification after restarts.",
+    "nl": "Herken nieuwe vogels automatisch met het handmatige herkenningsverzoek, ook bij gratis accounts. Voegt een Flow-trigger voor herkende vogels en de soortnaam op het apparaat en in de widget toe. Houdt voederhuisjes gescheiden en probeert mislukte herkenning opnieuw na een herstart."
+  },
   "1.0.0": {
     "en": "first version to test in public"
   },

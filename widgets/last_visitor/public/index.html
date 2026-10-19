@@ -85,7 +85,8 @@
             photo.src = result.dataUrl;
           }
           const when = formatTime(result.time);
-          caption.textContent = when ? T.lastAt + when : T.last;
+          const label = result.species || T.last;
+          caption.textContent = when ? label + ': ' + when : label;
           photo.style.display = 'block';
           caption.style.display = 'block';
           play.style.display = result.hasVideo ? 'block' : 'none';

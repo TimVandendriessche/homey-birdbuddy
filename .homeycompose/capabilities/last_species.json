@@ -1,0 +1,8 @@
+{
+  "type": "string",
+  "title": { "en": "Last identified bird", "nl": "Laatst herkende vogel" },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "icon": "/assets/icon.svg"
+}
