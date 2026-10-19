@@ -1,0 +1,14 @@
+{
+  "name": "homey-birdbuddy",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Unofficial Bird Buddy integration for Homey Pro",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "validate": "homey app validate"
+  },
+  "devDependencies": {
+    "homey": "4.6.0",
+    "graphql": "16.11.0"
+  }
+}
