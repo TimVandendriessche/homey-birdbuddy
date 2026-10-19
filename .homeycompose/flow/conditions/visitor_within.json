@@ -1,0 +1,36 @@
+{
+  "title": {
+    "en": "A visitor came in the last few minutes",
+    "nl": "Er was een bezoeker in de laatste minuten"
+  },
+  "titleFormatted": {
+    "en": "A visitor came in the last [[minutes]] minutes",
+    "nl": "Er was een bezoeker in de laatste [[minutes]] minuten"
+  },
+  "hint": {
+    "en": "True if the feeder saw a visitor within the given number of minutes. Visitors are detected at the check interval.",
+    "nl": "Waar als de feeder een bezoeker zag binnen het opgegeven aantal minuten. Bezoekers worden gezien op het controle-interval."
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=feeder"
+    },
+    {
+      "type": "number",
+      "name": "minutes",
+      "title": {
+        "en": "Minutes",
+        "nl": "Minuten"
+      },
+      "placeholder": {
+        "en": "60",
+        "nl": "60"
+      },
+      "min": 1,
+      "max": 10080,
+      "step": 1
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "title": {
+    "en": "A new visitor arrived",
+    "nl": "Er is een nieuwe bezoeker"
+  },
+  "hint": {
+    "en": "Triggers when the feeder has a new visitor photo. Checked every 15 minutes.",
+    "nl": "Gaat af als de feeder een nieuwe bezoekersfoto heeft. Wordt elke 15 minuten gecontroleerd."
+  },
+  "tokens": [
+    {
+      "name": "image",
+      "type": "image",
+      "title": {
+        "en": "Photo",
+        "nl": "Foto"
+      }
+    },
+    {
+      "name": "time",
+      "type": "string",
+      "title": {
+        "en": "Time of visit",
+        "nl": "Tijdstip bezoek"
+      },
+      "example": "2026-10-04T08:15:00.000Z"
+    }
+  ],
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=feeder"
+    }
+  ]
+}

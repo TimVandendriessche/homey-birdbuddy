@@ -1,0 +1,108 @@
+{
+  "name": {
+    "en": "Feeder",
+    "nl": "Voederhuisje"
+  },
+  "class": "sensor",
+  "capabilities": [
+    "measure_battery"
+  ],
+  "energy": {
+    "batteries": [
+      "INTERNAL"
+    ]
+  },
+  "platforms": [
+    "local"
+  ],
+  "connectivity": [
+    "cloud"
+  ],
+  "pair": [
+    {
+      "id": "login",
+      "template": "login_credentials",
+      "options": {
+        "usernameLabel": {
+          "en": "Email",
+          "nl": "E-mail"
+        },
+        "usernamePlaceholder": {
+          "en": "you@example.com",
+          "nl": "jij@voorbeeld.nl"
+        },
+        "passwordLabel": {
+          "en": "Password",
+          "nl": "Wachtwoord"
+        }
+      }
+    },
+    {
+      "id": "list_devices",
+      "template": "list_devices",
+      "navigation": {
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ],
+  "icon": "/drivers/feeder/assets/icon.svg",
+  "images": {
+    "small": "/drivers/feeder/assets/images/small.png",
+    "large": "/drivers/feeder/assets/images/large.png",
+    "xlarge": "/drivers/feeder/assets/images/xlarge.png"
+  },
+  "settings": [
+    {
+      "type": "group",
+      "label": {
+        "en": "Feeder",
+        "nl": "Voederhuisje"
+      },
+      "children": [
+        {
+          "id": "poll_interval",
+          "type": "number",
+          "label": {
+            "en": "Check interval",
+            "nl": "Controle-interval"
+          },
+          "hint": {
+            "en": "How often Bird Buddy is checked. Shorter means faster updates but more requests to Bird Buddy.",
+            "nl": "Hoe vaak Bird Buddy wordt gecontroleerd. Korter geeft snellere updates, maar meer verzoeken aan Bird Buddy."
+          },
+          "value": 15,
+          "min": 5,
+          "max": 120,
+          "units": {
+            "en": "minutes",
+            "nl": "minuten"
+          }
+        }
+      ]
+    }
+  ],
+  "repair": [
+    {
+      "id": "login",
+      "template": "login_credentials",
+      "options": {
+        "usernameLabel": {
+          "en": "Email",
+          "nl": "E-mail"
+        },
+        "usernamePlaceholder": {
+          "en": "you@example.com",
+          "nl": "jij@voorbeeld.nl"
+        },
+        "passwordLabel": {
+          "en": "Password",
+          "nl": "Wachtwoord"
+        }
+      }
+    }
+  ]
+}

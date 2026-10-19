@@ -1,0 +1,246 @@
+{
+  "_comment": "This file is generated. Please edit .homeycompose/app.json instead.",
+  "id": "community.birdbuddy",
+  "version": "1.0.1",
+  "compatibility": ">=12.3.0",
+  "sdk": 3,
+  "platforms": [
+    "local"
+  ],
+  "name": {
+    "en": "Bird Buddy",
+    "nl": "Bird Buddy"
+  },
+  "description": {
+    "en": "See every bird that visits your feeder",
+    "nl": "Zie elke vogel die je voederhuisje bezoekt"
+  },
+  "category": [
+    "appliances"
+  ],
+  "permissions": [],
+  "author": {
+    "name": "Tim Vandendriessche",
+    "email": "Tim.Homeyapps@outlook.com"
+  },
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png",
+    "xlarge": "/assets/images/xlarge.png"
+  },
+  "brandColor": "#2E7D32",
+  "support": "mailto:Tim.Homeyapps@outlook.com",
+  "flow": {
+    "triggers": [
+      {
+        "title": {
+          "en": "A new visitor arrived",
+          "nl": "Er is een nieuwe bezoeker"
+        },
+        "hint": {
+          "en": "Triggers when the feeder has a new visitor photo. Checked every 15 minutes.",
+          "nl": "Gaat af als de feeder een nieuwe bezoekersfoto heeft. Wordt elke 15 minuten gecontroleerd."
+        },
+        "tokens": [
+          {
+            "name": "image",
+            "type": "image",
+            "title": {
+              "en": "Photo",
+              "nl": "Foto"
+            }
+          },
+          {
+            "name": "time",
+            "type": "string",
+            "title": {
+              "en": "Time of visit",
+              "nl": "Tijdstip bezoek"
+            },
+            "example": "2026-10-04T08:15:00.000Z"
+          }
+        ],
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=feeder"
+          }
+        ],
+        "id": "visitor_arrived"
+      }
+    ],
+    "conditions": [
+      {
+        "title": {
+          "en": "A visitor came in the last few minutes",
+          "nl": "Er was een bezoeker in de laatste minuten"
+        },
+        "titleFormatted": {
+          "en": "A visitor came in the last [[minutes]] minutes",
+          "nl": "Er was een bezoeker in de laatste [[minutes]] minuten"
+        },
+        "hint": {
+          "en": "True if the feeder saw a visitor within the given number of minutes. Visitors are detected at the check interval.",
+          "nl": "Waar als de feeder een bezoeker zag binnen het opgegeven aantal minuten. Bezoekers worden gezien op het controle-interval."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=feeder"
+          },
+          {
+            "type": "number",
+            "name": "minutes",
+            "title": {
+              "en": "Minutes",
+              "nl": "Minuten"
+            },
+            "placeholder": {
+              "en": "60",
+              "nl": "60"
+            },
+            "min": 1,
+            "max": 10080,
+            "step": 1
+          }
+        ],
+        "id": "visitor_within"
+      }
+    ]
+  },
+  "drivers": [
+    {
+      "name": {
+        "en": "Feeder",
+        "nl": "Voederhuisje"
+      },
+      "class": "sensor",
+      "capabilities": [
+        "measure_battery"
+      ],
+      "energy": {
+        "batteries": [
+          "INTERNAL"
+        ]
+      },
+      "platforms": [
+        "local"
+      ],
+      "connectivity": [
+        "cloud"
+      ],
+      "pair": [
+        {
+          "id": "login",
+          "template": "login_credentials",
+          "options": {
+            "usernameLabel": {
+              "en": "Email",
+              "nl": "E-mail"
+            },
+            "usernamePlaceholder": {
+              "en": "you@example.com",
+              "nl": "jij@voorbeeld.nl"
+            },
+            "passwordLabel": {
+              "en": "Password",
+              "nl": "Wachtwoord"
+            }
+          }
+        },
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_devices"
+          }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ],
+      "icon": "/drivers/feeder/assets/icon.svg",
+      "images": {
+        "small": "/drivers/feeder/assets/images/small.png",
+        "large": "/drivers/feeder/assets/images/large.png",
+        "xlarge": "/drivers/feeder/assets/images/xlarge.png"
+      },
+      "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "Feeder",
+            "nl": "Voederhuisje"
+          },
+          "children": [
+            {
+              "id": "poll_interval",
+              "type": "number",
+              "label": {
+                "en": "Check interval",
+                "nl": "Controle-interval"
+              },
+              "hint": {
+                "en": "How often Bird Buddy is checked. Shorter means faster updates but more requests to Bird Buddy.",
+                "nl": "Hoe vaak Bird Buddy wordt gecontroleerd. Korter geeft snellere updates, maar meer verzoeken aan Bird Buddy."
+              },
+              "value": 15,
+              "min": 5,
+              "max": 120,
+              "units": {
+                "en": "minutes",
+                "nl": "minuten"
+              }
+            }
+          ]
+        }
+      ],
+      "repair": [
+        {
+          "id": "login",
+          "template": "login_credentials",
+          "options": {
+            "usernameLabel": {
+              "en": "Email",
+              "nl": "E-mail"
+            },
+            "usernamePlaceholder": {
+              "en": "you@example.com",
+              "nl": "jij@voorbeeld.nl"
+            },
+            "passwordLabel": {
+              "en": "Password",
+              "nl": "Wachtwoord"
+            }
+          }
+        }
+      ],
+      "id": "feeder"
+    }
+  ],
+  "widgets": {
+    "last_visitor": {
+      "name": {
+        "en": "Last visitor",
+        "nl": "Laatste bezoeker"
+      },
+      "height": "133%",
+      "transparent": false,
+      "api": {
+        "getPhoto": {
+          "method": "GET",
+          "path": "/"
+        },
+        "getVideo": {
+          "method": "GET",
+          "path": "/video"
+        }
+      },
+      "id": "last_visitor",
+      "settings": []
+    }
+  }
+}
