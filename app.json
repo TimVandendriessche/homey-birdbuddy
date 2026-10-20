@@ -52,22 +52,6 @@
             "example": "European Robin"
           },
           {
-            "name": "species_id",
-            "type": "string",
-            "title": {
-              "en": "Species ID(s)",
-              "nl": "Soort-ID('s)"
-            }
-          },
-          {
-            "name": "postcard_id",
-            "type": "string",
-            "title": {
-              "en": "Postcard ID",
-              "nl": "Ansichtkaart-ID"
-            }
-          },
-          {
             "name": "time",
             "type": "string",
             "title": {
@@ -242,7 +226,7 @@
                 "en": "Uses Bird Buddy's manual Identify request for new postcards, including free accounts. Identification happens at the check interval. Does not save or share postcards.",
                 "nl": "Gebruikt Bird Buddy's handmatige herkenningsverzoek voor nieuwe ansichtkaarten, ook bij gratis accounts. Herkenning gebeurt op het controle-interval. Slaat geen ansichtkaarten op en deelt ze niet."
               },
-              "value": true
+              "value": false
             },
             {
               "id": "poll_interval",
@@ -321,7 +305,7 @@
       "getable": true,
       "setable": false,
       "uiComponent": "sensor",
-      "icon": "/assets/icon.svg"
+      "icon": "/assets/last_species.svg"
     }
   }
 }

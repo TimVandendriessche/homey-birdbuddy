@@ -75,7 +75,7 @@
             "en": "Uses Bird Buddy's manual Identify request for new postcards, including free accounts. Identification happens at the check interval. Does not save or share postcards.",
             "nl": "Gebruikt Bird Buddy's handmatige herkenningsverzoek voor nieuwe ansichtkaarten, ook bij gratis accounts. Herkenning gebeurt op het controle-interval. Slaat geen ansichtkaarten op en deelt ze niet."
           },
-          "value": true
+          "value": false
         },
         {
           "id": "poll_interval",

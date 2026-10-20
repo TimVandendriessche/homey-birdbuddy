@@ -37,8 +37,6 @@ class FeederDevice extends Homey.Device {
       onAnalysis: card => this.updateSpecies(card),
       onIdentified: card => this.identifiedTrigger.trigger(this, {
         species: card.species.map(species => species.name).join(', '),
-        species_id: card.species.map(species => species.id).join(', '),
-        postcard_id: card.id,
         time: String(card.createdAt || ''),
       }),
       onError: err => this.error(err.message),
@@ -154,7 +152,7 @@ class FeederDevice extends Homey.Device {
     }
 
     // The photo is a bonus: a failure here must never break the battery status.
-    await this.monitor.poll(this.getSetting('auto_identify') !== false)
+    await this.monitor.poll(this.getSetting('auto_identify') === true)
       .catch(err => this.error(`Visitors: ${err.message}`));
   }
 

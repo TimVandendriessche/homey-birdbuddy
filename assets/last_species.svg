@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="960" viewBox="0 0 960 960">
+  <g transform="translate(0 -72) scale(9.6)" fill="#000000" stroke="#000000" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="none">
+      <polygon points="26,56 4,45 9,71 28,68"/>
+      <ellipse cx="46" cy="58" rx="27" ry="22"/>
+      <path fill-rule="evenodd" d="M52 38a15 15 0 1 0 30 0a15 15 0 1 0 -30 0ZM68 35a3.6 3.6 0 1 0 7.2 0a3.6 3.6 0 1 0 -7.2 0Z"/>
+      <polygon points="80,32 97,40 80,47"/>
+    </g>
+    <g stroke-width="4" fill="none">
+      <line x1="44" y1="78" x2="44" y2="88"/>
+      <line x1="56" y1="78" x2="56" y2="88"/>
+      <line x1="28" y1="91" x2="72" y2="91"/>
+    </g>
+  </g>
+</svg>
