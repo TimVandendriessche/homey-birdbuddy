@@ -2,6 +2,7 @@
 
 const Homey = require('homey');
 const BirdBuddyClient = require('../../lib/birdbuddy');
+const PostcardMonitor = require('../../lib/postcard-monitor');
 
 const DEFAULT_INTERVAL_MIN = 15;
 
@@ -10,6 +11,9 @@ class FeederDevice extends Homey.Device {
     // Devices added with an older version of this app get the capability changes here.
     if (this.hasCapability('alarm_battery')) await this.removeCapability('alarm_battery');
     if (this.hasCapability('feeder_charging')) await this.removeCapability('feeder_charging');
+    if (!this.hasCapability('last_species')) await this.addCapability('last_species');
+    await this.setCapabilityValue('last_species',
+      this.getStoreValue('lastIdentification')?.species || this.homey.__('species.unknown'));
 
     this.client = new BirdBuddyClient({
       ...this.getStore(),
@@ -23,6 +27,20 @@ class FeederDevice extends Homey.Device {
     this.imageBuffer = null;
     this.lastPostcardId = null;
     this.visitorTrigger = this.homey.flow.getDeviceTriggerCard('visitor_arrived');
+    this.identifiedTrigger = this.homey.flow.getDeviceTriggerCard('bird_identified');
+    this.monitor = new PostcardMonitor({
+      client: this.client,
+      feederId: this.getData().id,
+      state: this.getStoreValue('postcardMonitor'),
+      saveState: state => this.setStoreValue('postcardMonitor', state),
+      onCards: cards => this.updateVisitorCards(cards),
+      onAnalysis: card => this.updateSpecies(card),
+      onIdentified: card => this.identifiedTrigger.trigger(this, {
+        species: card.species.map(species => species.name).join(', '),
+        time: String(card.createdAt || ''),
+      }),
+      onError: err => this.error(err.message),
+    });
 
     // Camera image shown on the device: the most recent visitor photo.
     this.image = await this.homey.images.createImage();
@@ -109,6 +127,13 @@ class FeederDevice extends Homey.Device {
   }
 
   async refresh() {
+    // A slow inference request, Repair, and the interval must not overlap.
+    if (this.refreshing) return this.refreshing;
+    this.refreshing = this.refreshOnce().finally(() => { this.refreshing = null; });
+    return this.refreshing;
+  }
+
+  async refreshOnce() {
     try {
       const feeders = await this.client.getFeeders();
       const feeder = feeders.find(f => f.id === this.getData().id);
@@ -127,11 +152,11 @@ class FeederDevice extends Homey.Device {
     }
 
     // The photo is a bonus: a failure here must never break the battery status.
-    await this.updateLastVisitor().catch(err => this.error(`Last visitor: ${err.message}`));
+    await this.monitor.poll(this.getSetting('auto_identify') === true)
+      .catch(err => this.error(`Visitors: ${err.message}`));
   }
 
-  async updateLastVisitor() {
-    const card = await this.client.getLatestPostcard();
+  async updateLastVisitor(card) {
     if (!card || card.id === this.lastPostcardId) return;
 
     // Remembered across restarts, so old visitors don't trigger flows again.
@@ -143,6 +168,7 @@ class FeederDevice extends Homey.Device {
     await this.image.update();
     await this.setStoreValue('lastPostcardId', card.id);
     await this.setStoreValue('lastVisitAt', String(card.createdAt || ''));
+    await this.updateSpecies(card);
     this.log(`New visitor photo (${card.createdAt})`);
 
     await this.checkVideo().catch(err => this.error(`Video: ${err.message}`));
@@ -153,13 +179,21 @@ class FeederDevice extends Homey.Device {
     }
   }
 
+  async updateVisitorCards(cards) {
+    let card = cards.find(item => item.imageUrl);
+    // A cursor may point to a video-only visit. Restore the older photo after a
+    // restart without moving the identification cursor backwards.
+    if (!card && !this.imageBuffer) card = await this.client.getLatestPostcard(this.getData().id);
+    await this.updateLastVisitor(card);
+  }
+
   async checkVideo() {
     this.hasVideo = Boolean(await this.getLatestVideoUrl());
     this.log(this.hasVideo ? 'Visitor video available' : 'No video with this visit');
   }
 
   async getLatestVideoUrl() {
-    const video = await this.client.getLatestVideo();
+    const video = await this.client.getLatestVideo(this.getData().id);
     return video ? video.url : null;
   }
 
@@ -177,7 +211,18 @@ class FeederDevice extends Homey.Device {
       dataUrl: `data:image/jpeg;base64,${this.imageBuffer.toString('base64')}`,
       time: this.getStoreValue('lastVisitAt') || null,
       hasVideo: this.hasVideo,
+      species: this.getStoreValue('lastSpecies') || '',
     };
+  }
+
+  async updateSpecies(card) {
+    const species = card.species.map(item => item.name).join(', ');
+    if (card.id === this.lastPostcardId) await this.setStoreValue('lastSpecies', species);
+    const previous = this.getStoreValue('lastIdentification');
+    if (species && (!previous || Date.parse(card.createdAt) >= Date.parse(previous.time))) {
+      await this.setStoreValue('lastIdentification', { species, time: card.createdAt });
+      await this.setCapabilityValue('last_species', species);
+    }
   }
 
   async fireVisitorTrigger(card) {

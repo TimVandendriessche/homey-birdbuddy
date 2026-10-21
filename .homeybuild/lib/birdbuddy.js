@@ -11,7 +11,60 @@ const ENDPOINTS = [
   { host: 'graphql.app-api.prod.aws.mybirdbuddy.com', path: '/graphql' },
 ];
 
-function postTo({ host, path }, body, token) {
+// Fields verified against pybirdbuddy's POSTCARD_REANALYZE and schema snapshot;
+// see docs/birdbuddy-api.md for pinned sources. MediaVideo.contentUrl requires size.
+// Identification does not collect or share the postcard.
+const POSTCARD_FIELDS = `
+  id createdAt inferenceExecutionMode reanalyzeAvailability
+  feeder { ... on Feeder { id } }
+  medias {
+    __typename thumbnailUrl
+    ... on MediaImage { contentUrl(size: ORIGINAL) }
+    ... on MediaVideo { contentUrl(size: ORIGINAL) }
+  }
+  sightingReportPreview { sightings {
+    __typename
+    ... on SightingRecognizedBird { species { ... on Species { id name } } }
+    ... on SightingRecognizedBirdUnlocked { species { ... on Species { id name } } }
+  } }`;
+
+function postcard(node) {
+  if (!node || node.__typename !== 'FeedItemNewPostcard') return null;
+  const media = (node.medias || []).find(m => m.__typename === 'MediaImage');
+  const video = (node.medias || []).find(m => m.__typename === 'MediaVideo');
+  const sightings = (node.sightingReportPreview && node.sightingReportPreview.sightings) || [];
+  const species = new Map();
+  for (const sighting of sightings) {
+    if (['SightingRecognizedBird', 'SightingRecognizedBirdUnlocked'].includes(sighting.__typename)
+      && sighting.species && sighting.species.id && sighting.species.name) {
+      species.set(sighting.species.id, sighting.species);
+    }
+  }
+  return {
+    id: node.id,
+    createdAt: node.createdAt,
+    feederId: node.feeder && node.feeder.id,
+    imageUrl: media && (media.contentUrl || media.thumbnailUrl),
+    videoUrl: video && video.contentUrl,
+    inferenceExecutionMode: node.inferenceExecutionMode,
+    reanalyzeAvailability: node.reanalyzeAvailability,
+    species: [...species.values()],
+  };
+}
+
+function checkResponse({ status, json, retryAfter }, message) {
+  if (status >= 200 && status < 300 && json && !json.errors?.length && json.data) return;
+  const error = new Error(`${message}: ${firstError(json) || `HTTP ${status}`}`);
+  error.code = (json && json.errors && json.errors[0]?.extensions?.code) || `HTTP_${status}`;
+  error.status = status;
+  if (retryAfter) {
+    error.retryAfterMs = /^\d+$/.test(retryAfter)
+      ? Number(retryAfter) * 1000 : Math.max(0, Date.parse(retryAfter) - Date.now());
+  }
+  throw error;
+}
+
+function postTo({ host, path }, body, token, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify(body);
     const headers = {
@@ -27,14 +80,14 @@ function postTo({ host, path }, body, token) {
       res.on('data', chunk => { data += chunk; });
       res.on('end', () => {
         try {
-          resolve({ status: res.statusCode, json: JSON.parse(data) });
+          resolve({ status: res.statusCode, json: JSON.parse(data), retryAfter: res.headers['retry-after'] });
         } catch (err) {
           const snippet = data.replace(/\s+/g, ' ').slice(0, 200);
           reject(new Error(`Invalid response from ${host}${path} (HTTP ${res.statusCode}): ${snippet}`));
         }
       });
     });
-    req.setTimeout(15000, () => req.destroy(new Error('Bird Buddy request timed out')));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('Bird Buddy request timed out')));
     req.on('error', reject);
     req.write(payload);
     req.end();
@@ -43,13 +96,13 @@ function postTo({ host, path }, body, token) {
 
 let workingEndpoint = null;
 
-async function post(body, token) {
-  if (workingEndpoint) return postTo(workingEndpoint, body, token);
+async function post(body, token, timeoutMs) {
+  if (workingEndpoint) return postTo(workingEndpoint, body, token, timeoutMs);
 
   let lastError;
   for (const endpoint of ENDPOINTS) {
     try {
-      const result = await postTo(endpoint, body, token);
+      const result = await postTo(endpoint, body, token, timeoutMs);
       workingEndpoint = endpoint;
       console.log(`Bird Buddy endpoint in use: ${endpoint.host}${endpoint.path}`);
       return result;
@@ -211,12 +264,12 @@ class BirdBuddyClient {
   }
 
   // Runs a GraphQL query; renews the session once if the token was rejected.
-  async request(query) {
+  async request(query, variables = {}, timeoutMs) {
     await this.ensureSession();
-    let result = await post({ query }, this.accessToken);
+    let result = await post({ query, variables }, this.accessToken, timeoutMs);
     if (isAuthFailure(result)) {
       await this.reauth();
-      result = await post({ query }, this.accessToken);
+      result = await post({ query, variables }, this.accessToken, timeoutMs);
     }
     return result;
   }
@@ -237,86 +290,75 @@ class BirdBuddyClient {
     return feeders;
   }
 
-  // Returns { id, createdAt, imageUrl } for the newest postcard with a photo, or null.
-  async getLatestPostcard() {
-    // contentUrl needs a "size" argument; the allowed values are not documented,
-    // so try the likely ones and remember the first that the server accepts.
-    const sizes = this.imageSize ? [this.imageSize] : ['ORIGINAL', 'LARGE', 'MEDIUM', 'SMALL'];
-    const errors = [];
-    let edges = null;
-
-    for (const size of sizes) {
-      const query = `{ me { feed(first: 10) { edges { node {
-        __typename
-        ... on FeedItemNewPostcard {
-          id
-          createdAt
-          medias { __typename ... on MediaImage { thumbnailUrl contentUrl(size: ${size}) } }
-        }
-      } } } } }`;
-      const { json } = await this.request(query);
-      edges = json && json.data && json.data.me && json.data.me.feed && json.data.me.feed.edges;
-      if (edges) {
-        this.imageSize = size;
-        break;
+  // Read every new postcard since the previous poll, including unrecognized and
+  // video-only visits. The account feed contains ALL feeders, so filter by ID.
+  // Initial setup stops at the first page for this feeder, without analyzing history.
+  async getPostcards({ feederId, since = null } = {}) {
+    const cards = [];
+    const cursors = new Set();
+    let after = null;
+    do {
+      const afterArg = after ? `, after: ${JSON.stringify(after)}` : '';
+      const result = await this.request(`query HomeyPostcards {
+          me { feed(first: 50${afterArg}) {
+          edges { cursor node { __typename ... on FeedItem {
+            id createdAt
+          } ... on FeedItemNewPostcard { ${POSTCARD_FIELDS} } } }
+          pageInfo { hasNextPage endCursor }
+        } }
+      }`, { after });
+      checkResponse(result, 'Could not read postcards');
+      const feed = result.json.data.me && result.json.data.me.feed;
+      if (!feed || !Array.isArray(feed.edges)) throw new Error('Missing Bird Buddy feed');
+      const nodes = feed.edges.map(edge => edge && edge.node).filter(Boolean);
+      for (const node of nodes) {
+        const card = postcard(node);
+        if (card && (!feederId || card.feederId === feederId)
+          && (!since || Date.parse(card.createdAt) >= Date.parse(since))) cards.push(card);
       }
-      const message = json && json.errors && json.errors[0] && json.errors[0].message;
-      errors.push(`${size}: ${message || 'no data'}`);
-      // Only keep trying other sizes if the problem is the size value itself.
-      if (!message || !/MediaImageSize|enum/i.test(message)) break;
-    }
-    if (!edges) throw new Error(`Could not read feed from Bird Buddy: ${errors.join(' | ')}`);
-
-    const cards = edges
-      .map(e => e && e.node)
-      .filter(n => n && n.__typename === 'FeedItemNewPostcard')
-      .map(n => {
-        const media = (n.medias || []).find(m => m && (m.contentUrl || m.thumbnailUrl));
-        return media ? { id: n.id, createdAt: n.createdAt, imageUrl: media.contentUrl || media.thumbnailUrl } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    return cards[0] || null;
+      const reachedCursor = since && nodes.some(n => Date.parse(n.createdAt) < Date.parse(since));
+      if ((!since && cards.length) || reachedCursor || !feed.pageInfo?.hasNextPage) break;
+      after = feed.pageInfo.endCursor;
+      if (!after || cursors.has(after)) throw new Error('Bird Buddy feed pagination did not advance');
+      cursors.add(after);
+    } while (after);
+    return [...new Map(cards.map(card => [card.id, card])).values()]
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
 
-  // Returns { id, url } for the video of the newest postcard, or null when it has none.
-  // Video URLs are time-limited, so ask again right before playing.
-  async getLatestVideo() {
-    // The exact video field is undocumented: try with and without a "size" argument.
-    const selections = this.videoSelection
-      ? [this.videoSelection]
-      : ['contentUrl', 'contentUrl(size: ORIGINAL)', 'contentUrl(size: LARGE)', 'contentUrl(size: MEDIUM)'];
-    const errors = [];
-    let edges = null;
-
-    for (const selection of selections) {
-      const query = `{ me { feed(first: 10) { edges { node {
-        __typename
-        ... on FeedItemNewPostcard {
-          id
-          createdAt
-          medias { __typename ... on MediaVideo { ${selection} } }
-        }
-      } } } } }`;
-      const { json } = await this.request(query);
-      edges = json && json.data && json.data.me && json.data.me.feed && json.data.me.feed.edges;
-      if (edges) {
-        this.videoSelection = selection;
-        break;
+  async getPostcard(feedItemId) {
+    const result = await this.request(`query HomeyPostcard($feedItemId: ID!) {
+      feedItem(feedItemId: $feedItemId) {
+        __typename ... on FeedItemNewPostcard { ${POSTCARD_FIELDS} }
       }
-      const message = json && json.errors && json.errors[0] && json.errors[0].message;
-      errors.push(`${selection}: ${message || 'no data'}`);
-      if (!message || !/contentUrl|argument|size|enum/i.test(message)) break;
-    }
-    if (!edges) throw new Error(`Could not read video from Bird Buddy: ${errors.join(' | ')}`);
+    }`, { feedItemId });
+    checkResponse(result, 'Could not read postcard');
+    return postcard(result.json.data.feedItem);
+  }
 
-    const newest = edges
-      .map(e => e && e.node)
-      .filter(n => n && n.__typename === 'FeedItemNewPostcard')
-      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
-    if (!newest) return null;
-    const video = (newest.medias || []).find(m => m && m.__typename === 'MediaVideo' && m.contentUrl);
-    return video ? { id: newest.id, url: video.contentUrl } : null;
+  // Same request as the free account's "Identify this visitor" button.
+  async identifyPostcard(feedItemId) {
+    const result = await this.request(`mutation HomeyIdentifyPostcard($feedItemId: ID!) {
+      inferenceExternalPostcardReanalyze(feedItemId: $feedItemId) {
+        updatedFeedItem { __typename ${POSTCARD_FIELDS} }
+      }
+    }`, { feedItemId }, 60000);
+    checkResponse(result, 'Could not identify visitor');
+    const card = postcard(result.json.data.inferenceExternalPostcardReanalyze?.updatedFeedItem);
+    if (!card || card.id !== feedItemId) throw new Error('Missing identified Bird Buddy postcard');
+    return card;
+  }
+
+  async getLatestPostcard(feederId) {
+    const cards = await this.getPostcards({ feederId });
+    return cards.find(card => card.imageUrl) || null;
+  }
+
+  // Signed video URLs are refreshed immediately before playback.
+  async getLatestVideo(feederId) {
+    const cards = await this.getPostcards({ feederId });
+    const card = cards[0];
+    return card && card.videoUrl ? { id: card.id, url: card.videoUrl } : null;
   }
 
   download(url) {
