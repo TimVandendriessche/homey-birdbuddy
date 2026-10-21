@@ -6,8 +6,6 @@
   },
   "tokens": [
     { "name": "species", "type": "string", "title": { "en": "Bird species", "nl": "Vogelsoort" }, "example": "European Robin" },
-    { "name": "species_id", "type": "string", "title": { "en": "Species ID(s)", "nl": "Soort-ID('s)" } },
-    { "name": "postcard_id", "type": "string", "title": { "en": "Postcard ID", "nl": "Ansichtkaart-ID" } },
     { "name": "time", "type": "string", "title": { "en": "Time of visit", "nl": "Tijdstip bezoek" }, "example": "2026-10-19T08:15:00.000Z" }
   ],
   "args": [{ "type": "device", "name": "device", "filter": "driver_id=feeder" }]

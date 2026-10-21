@@ -75,9 +75,56 @@ function card(id, minute) {
     imageUrl: 'https://example.invalid/photo.jpg', species: [], inferenceExecutionMode: 'MANUAL_NOT_STARTED' };
 }
 
-test('Homey lifecycle migrates the capability, updates species/widget, and fires once per new visitor', async () => {
+for (const autoIdentify of [undefined, null, false]) {
+  test(`automatic identification requires opt-in when the setting is ${autoIdentify}`, async () => {
+    server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
+    const device = new FeederDevice({ settings: autoIdentify === undefined ? {} : { auto_identify: autoIdentify } });
+    await device.onInit();
+    server.cards.unshift(card('before-opt-in', 1));
+    await device.refresh();
+    assert.deepEqual(server.identified, []);
+    assert.equal(device.capabilities.get('measure_battery'), 75);
+    assert.equal(device.store.lastPostcardId, 'before-opt-in');
+    assert.deepEqual(device.events.map(event => event.name), ['visitor_arrived']);
+
+    device.settings.auto_identify = true;
+    server.cards.unshift(card('after-opt-in', 2));
+    await device.refresh();
+    assert.deepEqual(server.identified, ['after-opt-in']);
+    assert.equal(device.events.at(-1).name, 'bird_identified');
+  });
+}
+
+test('already recognized visitors still trigger identification Flows without opting in', async () => {
   server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
   const device = new FeederDevice();
+  await device.onInit();
+  server.cards.unshift({ ...card('premium', 1), inferenceExecutionMode: 'AUTOMATIC',
+    species: [{ id: 'jay', name: 'Jay' }] });
+  await device.refresh();
+  assert.deepEqual(server.identified, []);
+  assert.equal(device.capabilities.get('last_species'), 'Jay');
+  assert.deepEqual(device.events.at(-1).tokens, { species: 'Jay', time: card('premium', 1).createdAt });
+});
+
+test('an existing pending job stays paused when the setting is missing after an upgrade', async () => {
+  server = { cards: [card('pending', 1)], identified: [], videoFeederIds: [] };
+  const device = new FeederDevice({ store: { postcardMonitor: {
+    since: card('pending', 1).createdAt, seenIds: ['pending'],
+    jobs: [{ id: 'pending', notify: true, manual: true, attempts: 0, nextAttemptAt: 0 }],
+  } } });
+  await device.onInit();
+  assert.deepEqual(server.identified, []);
+  assert.equal(device.store.postcardMonitor.jobs.length, 1);
+  device.settings.auto_identify = true;
+  await device.refresh();
+  assert.deepEqual(server.identified, ['pending']);
+  assert.equal(device.store.postcardMonitor.jobs.length, 0);
+});
+
+test('Homey lifecycle migrates the capability, updates species/widget, and fires once per new visitor', async () => {
+  server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
+  const device = new FeederDevice({ settings: { auto_identify: true } });
   await device.onInit();
   assert.equal(device.capabilities.get('last_species'), 'European Robin');
   assert.equal(device.getLastVisitorPhoto().species, 'European Robin');
@@ -85,10 +132,12 @@ test('Homey lifecycle migrates the capability, updates species/widget, and fires
   server.cards.unshift(card('new', 1));
   await device.refresh();
   assert.deepEqual(device.events.map(event => event.name), ['visitor_arrived', 'bird_identified']);
-  assert.equal(device.events[1].tokens.species, 'European Robin');
-  assert.equal(device.events[1].tokens.postcard_id, 'new');
+  assert.deepEqual(device.events[1].tokens, {
+    species: 'European Robin',
+    time: card('new', 1).createdAt,
+  });
   assert.ok(server.videoFeederIds.every(id => id === 'feeder'));
-  const restarted = new FeederDevice({ store: device.store });
+  const restarted = new FeederDevice({ store: device.store, settings: device.settings });
   await restarted.onInit();
   assert.deepEqual(restarted.events, []);
   assert.deepEqual(server.identified, ['baseline', 'new']);
@@ -96,7 +145,7 @@ test('Homey lifecycle migrates the capability, updates species/widget, and fires
 
 test('a broken photo does not prevent identification or make the feeder unavailable', async () => {
   server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [], failDownload: true };
-  const device = new FeederDevice();
+  const device = new FeederDevice({ settings: { auto_identify: true } });
   await device.onInit();
   server.cards.unshift(card('new', 1));
   await device.refresh();
@@ -126,7 +175,7 @@ test('overlapping refreshes share one polling operation', async () => {
 
 test('video-only identification updates the species and preserves the previous photo after restart', async () => {
   server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
-  const device = new FeederDevice();
+  const device = new FeederDevice({ settings: { auto_identify: true } });
   await device.onInit();
   server.cards.unshift({ ...card('video', 1), imageUrl: undefined });
   device.client.identifyPostcard = async id => {
@@ -138,7 +187,7 @@ test('video-only identification updates the species and preserves the previous p
   await device.refresh();
   assert.equal(device.capabilities.get('last_species'), 'Jay');
   assert.equal(device.getLastVisitorPhoto().species, 'European Robin');
-  const restarted = new FeederDevice({ store: device.store });
+  const restarted = new FeederDevice({ store: device.store, settings: device.settings });
   await restarted.onInit();
   assert.equal(restarted.capabilities.get('last_species'), 'Jay');
   assert.equal(restarted.getLastVisitorPhoto().species, 'European Robin');

@@ -1,7 +1,7 @@
 {
   "_comment": "This file is generated. Please edit .homeycompose/app.json instead.",
   "id": "community.birdbuddy",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "compatibility": ">=12.3.0",
   "sdk": 3,
   "platforms": [
@@ -32,6 +32,44 @@
   "support": "mailto:Tim.Homeyapps@outlook.com",
   "flow": {
     "triggers": [
+      {
+        "title": {
+          "en": "A bird was identified",
+          "nl": "Er is een vogel herkend"
+        },
+        "hint": {
+          "en": "Triggers once a new postcard's bird species are known, including automatic identification for free Bird Buddy accounts. Uses the configured check interval.",
+          "nl": "Gaat af zodra de vogelsoorten van een nieuwe ansichtkaart bekend zijn, ook bij automatische herkenning voor gratis Bird Buddy-accounts. Gebruikt het ingestelde controle-interval."
+        },
+        "tokens": [
+          {
+            "name": "species",
+            "type": "string",
+            "title": {
+              "en": "Bird species",
+              "nl": "Vogelsoort"
+            },
+            "example": "European Robin"
+          },
+          {
+            "name": "time",
+            "type": "string",
+            "title": {
+              "en": "Time of visit",
+              "nl": "Tijdstip bezoek"
+            },
+            "example": "2026-10-19T08:15:00.000Z"
+          }
+        ],
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=feeder"
+          }
+        ],
+        "id": "bird_identified"
+      },
       {
         "title": {
           "en": "A new visitor arrived",
@@ -118,7 +156,8 @@
       },
       "class": "sensor",
       "capabilities": [
-        "measure_battery"
+        "measure_battery",
+        "last_species"
       ],
       "energy": {
         "batteries": [
@@ -176,6 +215,19 @@
             "nl": "Voederhuisje"
           },
           "children": [
+            {
+              "id": "auto_identify",
+              "type": "checkbox",
+              "label": {
+                "en": "Automatically identify birds",
+                "nl": "Vogels automatisch herkennen"
+              },
+              "hint": {
+                "en": "Uses Bird Buddy's manual Identify request for new postcards, including free accounts. Identification happens at the check interval. Does not save or share postcards.",
+                "nl": "Gebruikt Bird Buddy's handmatige herkenningsverzoek voor nieuwe ansichtkaarten, ook bij gratis accounts. Herkenning gebeurt op het controle-interval. Slaat geen ansichtkaarten op en deelt ze niet."
+              },
+              "value": false
+            },
             {
               "id": "poll_interval",
               "type": "number",
@@ -241,6 +293,19 @@
       },
       "id": "last_visitor",
       "settings": []
+    }
+  },
+  "capabilities": {
+    "last_species": {
+      "type": "string",
+      "title": {
+        "en": "Last identified bird",
+        "nl": "Laatst herkende vogel"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "icon": "/assets/last_species.svg"
     }
   }
 }
