@@ -8,5 +8,8 @@
   },
   "1.0.1": {
     "en": "solve issues to the homey regulations"
+  },
+  "1.2.0": {
+    "en": "Automatically identify new birds, including on free accounts. This is off by default; enable \"Automatically identify birds\" in the feeder settings to opt in."
   }
 }
