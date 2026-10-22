@@ -1,3 +1,0 @@
-Weet wie er in je tuin op bezoek komt. Bird Buddy toont de laatste bezoekersfoto en video van je slimme voederhuisje op je Homey-dashboard en laat je flows reageren zodra er een nieuwe vogel langskomt. De nieuwe vogel wordt automatisch herkend, ook bij de gratis accounts. Dit staat wel standaard uit en moet je zelf inschakelen bij de instellingen van de app.
-
-Log in met het e-mailadres en wachtwoord van je Bird Buddy-account. Inloggen met Google of Facebook wordt niet ondersteund: maak een account met wachtwoord aan en nodig dat uit voor je feeder in de Bird Buddy-app. Deze app is niet gemaakt of ondersteund door Bird Buddy en kan stoppen met werken als Bird Buddy zijn dienst aanpast.
