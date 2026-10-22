@@ -11,5 +11,8 @@
   },
   "1.2.0": {
     "en": "Automatically identify new birds, including on free accounts. This is off by default; enable \"Automatically identify birds\" in the feeder settings to opt in."
+  },
+  "1.2.1": {
+    "en": "Fixed a crash when adding the app (missing files)."
   }
 }
