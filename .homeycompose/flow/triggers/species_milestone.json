@@ -1,0 +1,30 @@
+{
+  "title": { "en": "A visit milestone was reached", "nl": "Een mijlpaal aan bezoeken is bereikt" },
+  "titleFormatted": {
+    "en": "[[species]] reached a multiple of [[every]] visits",
+    "nl": "[[species]] bereikte een veelvoud van [[every]] bezoeken"
+  },
+  "hint": {
+    "en": "Triggers when the visit count is 50, 100, 150... (for \"every 50\"). Choose \"Any species\" to count all birds together. Counts cover the period set in the feeder settings.",
+    "nl": "Gaat af wanneer het aantal bezoeken 50, 100, 150... is (bij \"om de 50\"). Kies \"Elke soort\" om alle vogels samen te tellen. De tellers omvatten de periode die je in de instellingen van het voederhuisje kiest."
+  },
+  "tokens": [
+    { "name": "species", "type": "string", "title": { "en": "Bird species", "nl": "Vogelsoort" }, "example": "European Robin" },
+    { "name": "count", "type": "number", "title": { "en": "Visits of this species", "nl": "Bezoeken van deze soort" }, "example": 50 },
+    { "name": "total", "type": "number", "title": { "en": "Visits of all birds", "nl": "Bezoeken van alle vogels" }, "example": 420 }
+  ],
+  "args": [
+    { "type": "device", "name": "device", "filter": "driver_id=feeder" },
+    {
+      "type": "autocomplete", "name": "species",
+      "title": { "en": "Bird species", "nl": "Vogelsoort" },
+      "placeholder": { "en": "Choose a species", "nl": "Kies een soort" }
+    },
+    {
+      "type": "number", "name": "every",
+      "title": { "en": "Every", "nl": "Om de" },
+      "placeholder": { "en": "50", "nl": "50" },
+      "min": 1, "max": 100000, "step": 1
+    }
+  ]
+}

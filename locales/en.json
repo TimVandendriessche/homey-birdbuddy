@@ -1,5 +1,8 @@
 {
-  "species": { "unknown": "Unknown bird" },
+  "species": {
+    "unknown": "Unknown bird",
+    "any": "Any species"
+  },
   "camera": {
     "lastVisitor": "Last visitor",
     "lastVisitorVideo": "Last visitor (video)"

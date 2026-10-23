@@ -1,0 +1,14 @@
+{
+  "name": {
+    "en": "Visitor statistics",
+    "nl": "Bezoekstatistieken"
+  },
+  "height": 340,
+  "transparent": false,
+  "api": {
+    "getStatistics": {
+      "method": "GET",
+      "path": "/"
+    }
+  }
+}

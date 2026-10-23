@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { margin: 0; height: 100%; }
+    body { font-size: 14px; color: var(--homey-text-color, #222); background: var(--homey-background-color, #fff); }
+    .wrap { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: 10px 12px; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+    .tab {
+      flex: 1; border: 0; border-radius: 14px; padding: 6px 2px; font-size: 13px; cursor: pointer;
+      background: rgba(128, 128, 128, 0.15); color: inherit;
+    }
+    .tab.active { background: #2E7D32; color: #fff; }
+    .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+    .head .big { font-size: 22px; font-weight: 600; }
+    .head .small { font-size: 12px; opacity: 0.65; }
+    .spark { display: flex; align-items: flex-end; gap: 2px; height: 28px; margin-bottom: 8px; }
+    .spark i { flex: 1; min-height: 2px; border-radius: 2px; background: #2E7D32; opacity: 0.75; }
+    .list { flex: 1; overflow-y: auto; }
+    .row { margin-bottom: 7px; }
+    .row .line { display: flex; justify-content: space-between; gap: 8px; }
+    .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .bar { height: 5px; border-radius: 3px; margin-top: 3px; background: rgba(128, 128, 128, 0.18); }
+    .row .bar b { display: block; height: 100%; border-radius: 3px; background: #2E7D32; }
+    .empty { margin: auto; text-align: center; opacity: 0.65; padding: 0 16px; }
+  </style>
+</head>
+<body class="homey-widget">
+  <div class="wrap">
+    <div class="tabs" id="tabs"></div>
+    <div id="content" class="list"></div>
+  </div>
+
+  <script type="text/javascript">
+    function onHomeyReady(Homey) {
+      Homey.ready();
+
+      const lang = (navigator.language || 'en').toLowerCase().startsWith('nl') ? 'nl' : 'en';
+      const T = {
+        en: { day: 'Day', week: 'Week', month: 'Month', year: 'Year', total: 'Total',
+              visits: 'visits', empty: 'No identified visits counted yet. Turn on "Automatically identify birds" in the feeder settings.',
+              last14: 'last 14 days', kept: 'kept for' , months: 'months', forever: 'kept without limit' },
+        nl: { day: 'Dag', week: 'Week', month: 'Maand', year: 'Jaar', total: 'Totaal',
+              visits: 'bezoeken', empty: 'Nog geen herkende bezoeken geteld. Zet "Vogels automatisch herkennen" aan in de instellingen van het voederhuisje.',
+              last14: 'laatste 14 dagen', kept: 'bewaard gedurende', months: 'maanden', forever: 'onbeperkt bewaard' },
+      }[lang];
+
+      const PERIODS = ['day', 'week', 'month', 'year', 'total'];
+      let selected = 'week';
+      let data = null;
+
+      const tabs = document.getElementById('tabs');
+      const content = document.getElementById('content');
+
+      PERIODS.forEach(period => {
+        const button = document.createElement('button');
+        button.className = 'tab';
+        button.textContent = T[period];
+        button.addEventListener('click', () => { selected = period; render(); });
+        button.dataset.period = period;
+        tabs.appendChild(button);
+      });
+
+      function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text; // never innerHTML: names come from the web
+        return node;
+      }
+
+      function render() {
+        tabs.querySelectorAll('.tab').forEach(button => {
+          button.classList.toggle('active', button.dataset.period === selected);
+        });
+        content.replaceChildren();
+        if (!data || !data.periods[selected] || !data.periods.total.total) {
+          content.appendChild(el('div', 'empty', T.empty));
+          return;
+        }
+        const period = data.periods[selected];
+
+        const head = el('div', 'head');
+        head.appendChild(el('span', 'big', period.total + ' ' + T.visits));
+        const kept = data.retentionMonths ? T.kept + ' ' + data.retentionMonths + ' ' + T.months : T.forever;
+        head.appendChild(el('span', 'small', kept));
+        content.appendChild(head);
+
+        const max = Math.max(1, ...data.daily.map(item => item.count));
+        const spark = el('div', 'spark');
+        spark.title = T.last14;
+        data.daily.forEach(item => {
+          const bar = el('i');
+          bar.style.height = Math.max(2, Math.round((item.count / max) * 28)) + 'px';
+          bar.title = item.day + ': ' + item.count;
+          spark.appendChild(bar);
+        });
+        content.appendChild(spark);
+
+        const top = Math.max(1, ...period.species.map(item => item.count));
+        period.species.forEach(item => {
+          const row = el('div', 'row');
+          const line = el('div', 'line');
+          line.appendChild(el('span', 'name', item.name));
+          line.appendChild(el('span', 'count', String(item.count)));
+          row.appendChild(line);
+          const bar = el('div', 'bar');
+          const fill = el('b');
+          fill.style.width = Math.round((item.count / top) * 100) + '%';
+          bar.appendChild(fill);
+          row.appendChild(bar);
+          content.appendChild(row);
+        });
+      }
+
+      async function load() {
+        try {
+          data = await Homey.api('GET', '/', {});
+        } catch (err) {
+          console.error(err);
+        }
+        render();
+      }
+
+      load();
+      setInterval(load, 5 * 60 * 1000);
+    }
+  </script>
+</body>
+</html>

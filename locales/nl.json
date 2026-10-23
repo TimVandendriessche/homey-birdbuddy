@@ -1,5 +1,8 @@
 {
-  "species": { "unknown": "Onbekende vogel" },
+  "species": {
+    "unknown": "Onbekende vogel",
+    "any": "Elke soort"
+  },
   "camera": {
     "lastVisitor": "Laatste bezoeker",
     "lastVisitorVideo": "Laatste bezoeker (video)"

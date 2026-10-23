@@ -14,5 +14,9 @@
   },
   "1.2.1": {
     "en": "Fixed a crash when adding the app (missing files)."
+  },
+  "1.3.0": {
+    "en": "Visit statistics: every identified visit is counted per bird species (day, week, month, year, total), starting from the numbers Bird Buddy already has. New Flow triggers for a specific species, visit milestones and new species, and a statistics widget. The keeping period can be set in the feeder settings. Switching on automatic identification now identifies the latest visitor right away. Bird names are shown in your Homey language (or a language you choose in the feeder settings): common garden birds are translated into Dutch, German and French.",
+    "nl": "Bezoekstatistieken: elk herkend bezoek wordt geteld per vogelsoort (dag, week, maand, jaar, totaal), te beginnen met de aantallen die Bird Buddy al heeft. Nieuwe Flow-triggers voor een bepaalde soort, mijlpalen en nieuwe soorten, en een statistiekenwidget. De bewaartermijn stel je in bij de instellingen van het voederhuisje. Bij het aanzetten van automatisch herkennen wordt de laatste bezoeker meteen herkend. Vogelnamen worden getoond in de taal van je Homey (of een taal die je kiest bij de instellingen van het voederhuisje): gewone tuinvogels worden vertaald naar Nederlands, Duits en Frans."
   }
 }

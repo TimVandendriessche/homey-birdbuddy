@@ -78,6 +78,26 @@
           "value": false
         },
         {
+          "id": "species_language",
+          "type": "dropdown",
+          "label": {
+            "en": "Language of bird names",
+            "nl": "Taal van de vogelnamen"
+          },
+          "hint": {
+            "en": "Bird Buddy only provides English names. Common garden birds are translated; other species stay in English.",
+            "nl": "Bird Buddy geeft alleen Engelse namen. Gewone tuinvogels worden vertaald, andere soorten blijven Engels."
+          },
+          "value": "auto",
+          "values": [
+            { "id": "auto", "label": { "en": "Same as Homey", "nl": "Zoals Homey" } },
+            { "id": "en", "label": { "en": "English", "nl": "Engels" } },
+            { "id": "nl", "label": { "en": "Dutch", "nl": "Nederlands" } },
+            { "id": "de", "label": { "en": "German", "nl": "Duits" } },
+            { "id": "fr", "label": { "en": "French", "nl": "Frans" } }
+          ]
+        },
+        {
           "id": "poll_interval",
           "type": "number",
           "label": {
@@ -95,6 +115,47 @@
             "en": "minutes",
             "nl": "minuten"
           }
+        }
+      ]
+    },
+    {
+      "type": "group",
+      "label": {
+        "en": "Statistics",
+        "nl": "Statistieken"
+      },
+      "children": [
+        {
+          "id": "stats_retention_months",
+          "type": "number",
+          "label": {
+            "en": "Keep visit statistics for",
+            "nl": "Bezoekstatistieken bewaren gedurende"
+          },
+          "hint": {
+            "en": "Visits per bird species are counted for as long as you set here. Older days are removed. 0 means nothing is ever removed. Only identified birds are counted, so turn on \"Automatically identify birds\" on a free Bird Buddy account.",
+            "nl": "Bezoeken per vogelsoort worden geteld voor de periode die je hier instelt. Oudere dagen worden verwijderd. 0 betekent dat er nooit iets wordt verwijderd. Alleen herkende vogels worden geteld, zet daarom \"Vogels automatisch herkennen\" aan bij een gratis Bird Buddy-account."
+          },
+          "value": 24,
+          "min": 0,
+          "max": 240,
+          "units": {
+            "en": "months",
+            "nl": "maanden"
+          }
+        },
+        {
+          "id": "stats_reimport",
+          "type": "checkbox",
+          "label": {
+            "en": "Fetch history from Bird Buddy again",
+            "nl": "Historiek opnieuw ophalen bij Bird Buddy"
+          },
+          "hint": {
+            "en": "On the first connection the visit counts Bird Buddy already has are copied automatically. Tick this to do that again, for example after you made the keeping period longer. It switches itself off when done and replaces the current numbers.",
+            "nl": "Bij de eerste verbinding worden de bezoektellers die Bird Buddy al heeft automatisch overgenomen. Vink dit aan om dat opnieuw te doen, bijvoorbeeld nadat je de bewaartermijn langer maakte. Het vinkje gaat zelf weer uit als het klaar is en vervangt de huidige aantallen."
+          },
+          "value": false
         }
       ]
     }

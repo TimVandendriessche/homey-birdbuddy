@@ -1,0 +1,11 @@
+{
+  "title": { "en": "A new bird species was seen", "nl": "Een nieuwe vogelsoort is gezien" },
+  "hint": {
+    "en": "Triggers the first time a species is seen at your feeder. The very first species counted only sets the starting point.",
+    "nl": "Gaat af de eerste keer dat een soort bij je voederhuisje wordt gezien. De allereerste getelde soort vormt enkel het startpunt."
+  },
+  "tokens": [
+    { "name": "species", "type": "string", "title": { "en": "Bird species", "nl": "Vogelsoort" }, "example": "Eurasian Blue Tit" }
+  ],
+  "args": [{ "type": "device", "name": "device", "filter": "driver_id=feeder" }]
+}

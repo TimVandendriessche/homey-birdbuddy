@@ -1,0 +1,21 @@
+{
+  "title": { "en": "A bird species visited", "nl": "Een vogelsoort kwam langs" },
+  "titleFormatted": { "en": "[[species]] visited", "nl": "[[species]] kwam langs" },
+  "hint": {
+    "en": "Triggers for every identified visit of the chosen species, also when several birds arrived between two checks. Choose \"Any species\" to trigger for all birds.",
+    "nl": "Gaat af bij elk herkend bezoek van de gekozen soort, ook als er tussen twee controles meerdere vogels langskwamen. Kies \"Elke soort\" om voor alle vogels af te gaan."
+  },
+  "tokens": [
+    { "name": "species", "type": "string", "title": { "en": "Bird species", "nl": "Vogelsoort" }, "example": "European Robin" },
+    { "name": "count_today", "type": "number", "title": { "en": "Visits today", "nl": "Bezoeken vandaag" }, "example": 3 },
+    { "name": "count_total", "type": "number", "title": { "en": "Visits in total", "nl": "Bezoeken in totaal" }, "example": 50 }
+  ],
+  "args": [
+    { "type": "device", "name": "device", "filter": "driver_id=feeder" },
+    {
+      "type": "autocomplete", "name": "species",
+      "title": { "en": "Bird species", "nl": "Vogelsoort" },
+      "placeholder": { "en": "Choose a species", "nl": "Kies een soort" }
+    }
+  ]
+}

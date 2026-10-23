@@ -3,8 +3,15 @@
 const Homey = require('homey');
 const BirdBuddyClient = require('../../lib/birdbuddy');
 const PostcardMonitor = require('../../lib/postcard-monitor');
+const { VisitStats, planBackfill } = require('../../lib/stats');
+const { translate, translateList, SUPPORTED } = require('../../lib/species-names');
 
 const DEFAULT_INTERVAL_MIN = 15;
+const BACKFILL_RETRY_MS = 6 * 60 * 60 * 1000;
+const BACKFILL_PAUSE_MS = 250;
+const MAX_BACKFILL_MONTHS = 120;
+const BACKFILL_PARALLEL = 4;
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class FeederDevice extends Homey.Device {
   async onInit() {
@@ -12,8 +19,7 @@ class FeederDevice extends Homey.Device {
     if (this.hasCapability('alarm_battery')) await this.removeCapability('alarm_battery');
     if (this.hasCapability('feeder_charging')) await this.removeCapability('feeder_charging');
     if (!this.hasCapability('last_species')) await this.addCapability('last_species');
-    await this.setCapabilityValue('last_species',
-      this.getStoreValue('lastIdentification')?.species || this.homey.__('species.unknown'));
+    await this.showLastSpecies();
 
     this.client = new BirdBuddyClient({
       ...this.getStore(),
@@ -24,6 +30,10 @@ class FeederDevice extends Homey.Device {
       ? 'Login storage: password kept as fallback'
       : 'Login storage: tokens only, no password stored');
 
+    this.stats = new VisitStats(this.getStoreValue('visitStats'));
+    this.recorded = new Map();
+    this.pendingRecords = [];
+    this.backfilling = null;
     this.imageBuffer = null;
     this.lastPostcardId = null;
     this.visitorTrigger = this.homey.flow.getDeviceTriggerCard('visitor_arrived');
@@ -34,11 +44,17 @@ class FeederDevice extends Homey.Device {
       state: this.getStoreValue('postcardMonitor'),
       saveState: state => this.setStoreValue('postcardMonitor', state),
       onCards: cards => this.updateVisitorCards(cards),
-      onAnalysis: card => this.updateSpecies(card),
-      onIdentified: card => this.identifiedTrigger.trigger(this, {
-        species: card.species.map(species => species.name).join(', '),
-        time: String(card.createdAt || ''),
-      }),
+      onAnalysis: async card => {
+        await this.updateSpecies(card);
+        await this.recordVisit(card);
+      },
+      onIdentified: async card => {
+        await this.identifiedTrigger.trigger(this, {
+          species: card.species.map(species => this.speciesName(species.name)).join(', '),
+          time: String(card.createdAt || ''),
+        });
+        await this.fireStatTriggers(card).catch(err => this.error(`Statistics flows: ${err.message}`));
+      },
       onError: err => this.error(err.message),
     });
 
@@ -124,6 +140,25 @@ class FeederDevice extends Homey.Device {
     if (changedKeys.includes('poll_interval')) {
       this.startPolling(newSettings.poll_interval);
     }
+    if (changedKeys.includes('species_language')) {
+      await this.showLastSpecies(this.speciesLanguage(newSettings.species_language));
+    }
+    if (changedKeys.includes('auto_identify') && newSettings.auto_identify) {
+      // Identify the latest visitor right away. Runs after the new setting is in place.
+      await this.setStoreValue('latestQueued', false);
+      this.homey.setTimeout(() => this.refresh().catch(err => this.error(err.message)), 1000);
+    }
+    if (changedKeys.includes('stats_reimport') && newSettings.stats_reimport) {
+      // Fetch the history again; the checkbox switches itself off when done.
+      this.fillHistory(true)
+        .catch(err => this.error(`History: ${err.message}`))
+        .finally(() => this.setSettings({ stats_reimport: false }).catch(this.error));
+    }
+    if (changedKeys.includes('stats_retention_months')) {
+      // A shorter period removes the older days right away.
+      this.stats.prune(newSettings.stats_retention_months, Date.now(), this.timeZone());
+      await this.setStoreValue('visitStats', this.stats.toJSON());
+    }
   }
 
   async refresh() {
@@ -154,6 +189,102 @@ class FeederDevice extends Homey.Device {
     // The photo is a bonus: a failure here must never break the battery status.
     await this.monitor.poll(this.getSetting('auto_identify') === true)
       .catch(err => this.error(`Visitors: ${err.message}`));
+
+    await this.identifyLatestOnce().catch(err => this.error(`Latest visitor: ${err.message}`));
+
+    // Once per device: copy the existing numbers from Bird Buddy. Runs in the background.
+    if (!this.stats.data.backfilledUntil) {
+      this.fillHistory(false).catch(err => this.error(`History: ${err.message}`));
+    }
+  }
+
+  // With automatic identification on and no bird known yet, identify the latest visit once.
+  async identifyLatestOnce() {
+    if (this.getSetting('auto_identify') !== true) return;
+    if (this.getStoreValue('lastIdentification') || this.getStoreValue('latestQueued')) return;
+    await this.setStoreValue('latestQueued', true);
+    if (await this.monitor.queueLatest()) await this.monitor.poll(true);
+  }
+
+  // Fills the statistics with the visit counts Bird Buddy already has.
+  // A second call while one is running waits for that one.
+  fillHistory(force) {
+    if (this.backfilling) return this.backfilling;
+    const last = Date.parse(this.getStoreValue('historyAttemptAt'));
+    if (!force && Number.isFinite(last) && Date.now() - last < BACKFILL_RETRY_MS) return Promise.resolve();
+    this.backfilling = this.runHistory()
+      .finally(async () => {
+        this.backfilling = null;
+        // Visits that came in while the history was being fetched.
+        const waiting = this.pendingRecords.splice(0);
+        for (const card of waiting) await this.recordVisit(card).catch(err => this.error(err.message));
+      });
+    return this.backfilling;
+  }
+
+  // Visits per species in one period. A period without visits makes Bird Buddy answer
+  // "Internal server error"; after one retry that is treated as no visits.
+  async fetchWindow(userId, feederId, window) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await this.client.getVisitReport({ userId, feederId, start: window.start, end: window.end });
+      } catch (err) {
+        if (!/Internal server error/i.test(err.message)) throw err;
+      }
+    }
+    return [];
+  }
+
+  async runHistory() {
+    await this.setStoreValue('historyAttemptAt', new Date().toISOString());
+    const retention = Number(this.getSetting('stats_retention_months')) || 0;
+    const months = retention > 0 ? Math.min(retention, MAX_BACKFILL_MONTHS) : 60;
+    const now = Date.now();
+    const feederId = this.getData().id;
+    const userId = await this.client.getUserId();
+
+    const buckets = {};
+    const names = {};
+    const plan = planBackfill(now, this.timeZone(), months);
+    this.log(`History: fetching ${plan.length} periods from Bird Buddy`);
+    const pause = this.backfillPauseMs === undefined ? BACKFILL_PAUSE_MS : this.backfillPauseMs;
+    let next = 0;
+    let done = 0;
+    let failed = false;
+    const worker = async () => {
+      while (!failed && next < plan.length) {
+        const window = plan[next]; next += 1;
+        try {
+          const rows = await this.fetchWindow(userId, feederId, window);
+          for (const row of rows) {
+            (buckets[window.key] || (buckets[window.key] = {}))[row.id] = row.count;
+            names[row.id] = row.name;
+          }
+        } catch (err) {
+          failed = true;
+          throw err;
+        }
+        done += 1;
+        if (done % 10 === 0) this.log(`History: ${done}/${plan.length} periods`);
+        await sleep(pause);
+      }
+    };
+    await Promise.all(Array.from({ length: BACKFILL_PARALLEL }, worker));
+
+    // Bird Buddy answers a period without visits with an error, which we count as zero.
+    // Safety net: the pieces must add up to the total over the whole period.
+    const whole = await this.fetchWindow(userId, feederId,
+      { start: Math.min(...plan.map(window => window.start)), end: now });
+    const expected = whole.reduce((sum, row) => sum + row.count, 0);
+    const found = Object.values(buckets).reduce((sum, bucket) => (
+      sum + Object.values(bucket).reduce((a, b) => a + b, 0)), 0);
+    if (Math.abs(found - expected) > Math.max(2, Math.ceil(expected * 0.01))) {
+      throw new Error(`History check failed: periods add up to ${found}, Bird Buddy says ${expected}`);
+    }
+    this.stats.applyBackfill(buckets, names, now);
+    this.stats.prune(retention, Date.now(), this.timeZone());
+    await this.setStoreValue('visitStats', this.stats.toJSON());
+    this.log(`History filled: ${Object.keys(names).length} species, ${found} visits (checked)`);
   }
 
   async updateLastVisitor(card) {
@@ -211,7 +342,7 @@ class FeederDevice extends Homey.Device {
       dataUrl: `data:image/jpeg;base64,${this.imageBuffer.toString('base64')}`,
       time: this.getStoreValue('lastVisitAt') || null,
       hasVideo: this.hasVideo,
-      species: this.getStoreValue('lastSpecies') || '',
+      species: translateList(this.getStoreValue('lastSpecies') || '', this.speciesLanguage()),
     };
   }
 
@@ -221,8 +352,98 @@ class FeederDevice extends Homey.Device {
     const previous = this.getStoreValue('lastIdentification');
     if (species && (!previous || Date.parse(card.createdAt) >= Date.parse(previous.time))) {
       await this.setStoreValue('lastIdentification', { species, time: card.createdAt });
-      await this.setCapabilityValue('last_species', species);
+      await this.showLastSpecies();
     }
+  }
+
+  // Language of the bird names: the setting, or the Homey language when set to automatic.
+  speciesLanguage(setting = this.getSetting('species_language')) {
+    const wanted = !setting || setting === 'auto'
+      ? (this.homey.i18n && this.homey.i18n.getLanguage && this.homey.i18n.getLanguage()) || 'en'
+      : setting;
+    return SUPPORTED.includes(wanted) ? wanted : 'en';
+  }
+
+  speciesName(name, language) {
+    return translate(name, language || this.speciesLanguage());
+  }
+
+  // The last identified species in the chosen language (the stored name stays English).
+  async showLastSpecies(language) {
+    const species = this.getStoreValue('lastIdentification')?.species;
+    await this.setCapabilityValue('last_species',
+      species ? translateList(species, language || this.speciesLanguage()) : this.homey.__('species.unknown'));
+  }
+
+  timeZone() {
+    return this.homey.clock.getTimezone();
+  }
+
+  // Counts every identified visit once. Runs for each postcard, also for visits that
+  // arrived together within one check interval.
+  async recordVisit(card) {
+    if (this.backfilling) { this.pendingRecords.push(card); return; }
+    const results = this.stats.record(card, this.timeZone());
+    if (!results.length) return;
+    this.stats.prune(this.getSetting('stats_retention_months'), Date.now(), this.timeZone());
+    await this.setStoreValue('visitStats', this.stats.toJSON());
+    this.recorded.set(card.id, results);
+    // Only the latest few are needed: flows for a card run right after it is counted.
+    if (this.recorded.size > 50) this.recorded.delete(this.recorded.keys().next().value);
+  }
+
+  async fireStatTriggers(card) {
+    const results = this.recorded.get(card.id) || [];
+    this.recorded.delete(card.id);
+    const now = Date.now();
+    const zone = this.timeZone();
+    const total = this.stats.total('total', now, zone);
+    for (const result of results) {
+      const count = this.stats.count(result.id, 'total', now, zone);
+      const tokens = {
+        species: this.speciesName(result.name),
+        count_today: this.stats.count(result.id, 'day', now, zone),
+        count_total: count,
+      };
+      const state = { id: result.id, count, total };
+      await this.homey.flow.getDeviceTriggerCard('species_visited').trigger(this, tokens, state);
+      await this.homey.flow.getDeviceTriggerCard('species_milestone')
+        .trigger(this, { species: this.speciesName(result.name), count, total }, state);
+      if (result.isNew) {
+        await this.homey.flow.getDeviceTriggerCard('new_species')
+          .trigger(this, { species: this.speciesName(result.name) }, state);
+      }
+    }
+  }
+
+  // Choices for the species pickers in Flow cards.
+  getSpeciesOptions(query, includeAny) {
+    const text = String(query || '').toLowerCase();
+    const options = this.stats.speciesList()
+      .map(item => ({ id: item.id, name: this.speciesName(item.name), english: item.name, count: item.count }))
+      .filter(item => item.name.toLowerCase().includes(text) || item.english.toLowerCase().includes(text))
+      .map(item => ({ id: item.id, name: item.name, description: `${item.count}×` }));
+    if (includeAny) options.unshift({ id: '*', name: this.homey.__('species.any') });
+    return options;
+  }
+
+  // Used by the statistics widget.
+  getStatistics() {
+    const now = Date.now();
+    const zone = this.timeZone();
+    const periods = {};
+    for (const period of ['day', 'week', 'month', 'year', 'total']) {
+      periods[period] = {
+        total: this.stats.total(period, now, zone),
+        species: this.stats.counts(period, now, zone).slice(0, 10)
+          .map(row => ({ ...row, name: this.speciesName(row.name) })),
+      };
+    }
+    return {
+      periods,
+      daily: this.stats.daily(14, now, zone),
+      retentionMonths: Number(this.getSetting('stats_retention_months')) || 0,
+    };
   }
 
   async fireVisitorTrigger(card) {

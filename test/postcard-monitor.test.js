@@ -126,3 +126,23 @@ test('postcards sharing the cursor timestamp are not skipped', async () => {
   await f.monitor.poll(true);
   assert.deepEqual(f.calls, ['also-new']);
 });
+
+test('queueLatest identifies the newest identifiable recent visit without notifying a Flow', async () => {
+  const f = setup({ since: card('no-bird', 3).createdAt, seenIds: ['no-bird'] });
+  // Newest has no bird (already analysed), the one before it can still be identified.
+  f.cards = [card('no-bird', 3, { inferenceExecutionMode: 'MANUAL_COMPLETED' }), card('pending', 2), card('older', 1)];
+  assert.equal(await f.monitor.queueLatest(), true);
+  await f.monitor.poll(true);
+  assert.deepEqual(f.calls, ['pending']);
+  assert.deepEqual(f.notified, []);
+  assert.equal(f.analyses.length, 1);
+});
+
+test('queueLatest does nothing when no recent visit can be identified, and never queues twice', async () => {
+  const f = setup({ since: card('baseline').createdAt, seenIds: ['baseline'] });
+  f.cards = [card('done', 1, { inferenceExecutionMode: 'MANUAL_COMPLETED' })];
+  assert.equal(await f.monitor.queueLatest(), false);
+  f.cards = [card('pending', 2)];
+  assert.equal(await f.monitor.queueLatest(), true);
+  assert.equal(await f.monitor.queueLatest(), false);
+});
