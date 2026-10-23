@@ -1,0 +1,24 @@
+{
+  "title": { "en": "A rare bird visited", "nl": "Een zeldzame vogel kwam langs" },
+  "titleFormatted": {
+    "en": "A species visited that was seen at most [[times]] times",
+    "nl": "Een soort kwam langs die hoogstens [[times]] keer is gezien"
+  },
+  "hint": {
+    "en": "Triggers when a species visits that you have seen only a few times, counting this visit. Counts cover the period set in the feeder settings.",
+    "nl": "Gaat af wanneer een soort langskomt die je pas een paar keer zag, dit bezoek meegeteld. De tellers omvatten de periode die je in de instellingen van het voederhuisje kiest."
+  },
+  "tokens": [
+    { "name": "species", "type": "string", "title": { "en": "Bird species", "nl": "Vogelsoort" }, "example": "Hawfinch" },
+    { "name": "count", "type": "number", "title": { "en": "Times seen", "nl": "Aantal keer gezien" }, "example": 2 }
+  ],
+  "args": [
+    { "type": "device", "name": "device", "filter": "driver_id=feeder" },
+    {
+      "type": "number", "name": "times",
+      "title": { "en": "At most", "nl": "Hoogstens" },
+      "placeholder": { "en": "3", "nl": "3" },
+      "min": 1, "max": 1000, "step": 1
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { translate, translateList, SUPPORTED, NAMES } = require('../lib/species-names');
+const { translate, translateList, isBird, SUPPORTED, NAMES } = require('../lib/species-names');
 
 test('species of the feeder are translated to Dutch, German and French', () => {
   assert.equal(translate('Great Tit', 'nl'), 'Koolmees');
@@ -37,4 +37,10 @@ test('every entry is complete and no English name appears twice', () => {
     seen.add(row[0].toLowerCase());
   }
   assert.deepEqual(SUPPORTED, ['en', 'nl', 'de', 'fr']);
+});
+
+test('a fly is not a bird, everything else is', () => {
+  assert.equal(isBird('Fly'), false);
+  assert.equal(isBird(' fly '), false);
+  assert.equal(isBird('Great Tit'), true);
 });

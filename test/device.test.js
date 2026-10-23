@@ -20,7 +20,7 @@ class MockDevice {
       clearInterval: () => {}, setInterval: () => 1,
       setTimeout: fn => globalThis.setTimeout(fn, 0),
       flow: { getDeviceTriggerCard: name => ({ trigger: async (_, tokens, state) => (
-        ['species_visited', 'species_milestone', 'new_species'].includes(name) ? this.statEvents : this.events
+        ['species_visited', 'species_milestone', 'new_species', 'rare_visitor', 'no_visitors', 'daily_summary'].includes(name) ? this.statEvents : this.events
       ).push({ name, tokens, state }) }) },
       images: { createImage: async () => ({ setStream() {}, async update() {} }) },
       videos: { createVideoOther: async () => ({ registerVideoUrlListener() {} }) },
@@ -28,6 +28,7 @@ class MockDevice {
   }
   getStore() { return this.store; }
   getStoreValue(key) { return this.store[key]; }
+  getCapabilityValue(key) { return this.capabilities.get(key); }
   async setStoreValue(key, value) { this.store[key] = structuredClone(value); }
   getData() { return { id: 'feeder' }; }
   getSetting(key) { return this.settings[key]; }
@@ -233,7 +234,7 @@ test('species flows fire per counted visit with running totals, never for the ba
   server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
   const device = new FeederDevice({ settings: { auto_identify: true } });
   await device.onInit();
-  assert.deepEqual(device.statEvents, []);
+  assert.deepEqual(device.statEvents.filter(event => event.name !== 'no_visitors'), []);
   server.cards.unshift(card('v2', 2));
   server.cards.unshift(card('v1', 1));
   await device.refresh();
@@ -433,4 +434,102 @@ test('a language Homey has but the list does not (for example Swedish) falls bac
   device.homey.i18n.getLanguage = () => 'sv';
   await device.onInit();
   assert.equal(device.capabilities.get('last_species'), 'European Robin');
+});
+
+const speciesCard = (id, createdAt, ...species) => ({ ...card(id, 0), createdAt, species, inferenceExecutionMode: 'AUTOMATIC' });
+const FLY = { id: 'fly', name: 'Fly' };
+const TIT = { id: 'tit', name: 'Great Tit' };
+
+test('"visits today" follows the counted visits and leaves out flies unless asked', async () => {
+  server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
+  const device = new FeederDevice({ settings: { auto_identify: true } });
+  await device.onInit();
+  const before = device.capabilities.get('visits_today');
+  await device.recordVisit(speciesCard('a', new Date().toISOString(), TIT));
+  assert.equal(device.capabilities.get('visits_today'), before + 1);
+  await device.recordVisit(speciesCard('b', new Date().toISOString(), FLY));
+  assert.equal(device.capabilities.get('visits_today'), before + 1, 'a fly is not counted');
+  await device.onSettings({ newSettings: { count_non_birds: true }, changedKeys: ['count_non_birds'] });
+  assert.equal(device.capabilities.get('visits_today'), before + 2);
+});
+
+test('a fly never starts a species Flow', async () => {
+  server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
+  const device = new FeederDevice({ settings: { auto_identify: true } });
+  await device.onInit();
+  device.statEvents.length = 0;
+  const fly = speciesCard('f', new Date().toISOString(), FLY);
+  await device.recordVisit(fly);
+  await device.fireStatTriggers(fly);
+  assert.deepEqual(device.statEvents, []);
+});
+
+test('rare visitor Flow gets the number of times the species was seen', async () => {
+  server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
+  const device = new FeederDevice({ settings: { auto_identify: true } });
+  await device.onInit();
+  device.statEvents.length = 0;
+  const visit = speciesCard('t', new Date().toISOString(), TIT);
+  await device.recordVisit(visit);
+  await device.fireStatTriggers(visit);
+  const rare = device.statEvents.find(event => event.name === 'rare_visitor');
+  assert.deepEqual(rare.state, { id: 'tit', count: 1, total: rare.state.total });
+  assert.equal(rare.tokens.count, 1);
+});
+
+test('the daily summary is sent once a day, from the chosen hour, and only with visits', async () => {
+  server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
+  const device = new FeederDevice({ settings: { auto_identify: true, summary_hour: 20, species_language: 'nl' } });
+  await device.onInit();
+  device.statEvents.length = 0;
+  // A fixed summer day, so the test does not depend on the time it runs.
+  const day = Date.parse('2026-06-15T00:00:00Z');
+  await device.recordVisit(speciesCard('s1', new Date(day + 8 * 3600e3).toISOString(), TIT));
+  await device.recordVisit(speciesCard('s2', new Date(day + 9 * 3600e3).toISOString(), TIT));
+  const at = hour => day + hour * 3600e3;
+  // Brussels is UTC+2 in June: 05:00 UTC is 07:00 local (too early), 19:00 UTC is 21:00 local.
+  await device.sendSummaryIfDue(at(5));
+  assert.equal(device.statEvents.some(event => event.name === 'daily_summary'), false, 'too early');
+  await device.sendSummaryIfDue(at(19));
+  const summary = device.statEvents.filter(event => event.name === 'daily_summary');
+  assert.equal(summary.length, 1);
+  assert.match(summary[0].tokens.summary, /^\d+× Koolmees/);
+  assert.equal(summary[0].tokens.species >= 1, true);
+  await device.sendSummaryIfDue(at(21));
+  assert.equal(device.statEvents.filter(event => event.name === 'daily_summary').length, 1, 'only once per day');
+});
+
+test('no summary on a day without visits', async () => {
+  server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
+  const device = new FeederDevice({ settings: { summary_hour: 0 } }); // no auto-identify: nothing counted
+  await device.onInit();
+  device.statEvents.length = 0;
+  await device.sendSummaryIfDue(Date.now());
+  assert.equal(device.statEvents.some(event => event.name === 'daily_summary'), false);
+});
+
+test('"no visitors" fires once per Flow per quiet period and again after a new visit', async () => {
+  server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
+  const device = new FeederDevice({ settings: {} });
+  await device.onInit();
+  const last = device.getStoreValue('lastVisitAt');
+  const state = hours => ({ hours, last });
+  assert.equal(await device.shouldFireNoVisitors(24, state(30)), true);
+  assert.equal(await device.shouldFireNoVisitors(24, state(31)), false, 'same quiet period');
+  assert.equal(await device.shouldFireNoVisitors(48, state(31)), false, 'not long enough for this Flow');
+  assert.equal(await device.shouldFireNoVisitors(48, state(49)), true, 'another Flow has its own turn');
+  assert.equal(await device.shouldFireNoVisitors(24, { hours: 30, last: 'a-newer-visit' }), true, 'after a new visit');
+});
+
+test('the quiet-period check offers the silence only when it is at least an hour', async () => {
+  server = { cards: [card('baseline', 0)], identified: [], videoFeederIds: [] };
+  const device = new FeederDevice({ settings: {} });
+  await device.onInit();
+  device.statEvents.length = 0;
+  const last = Date.parse(device.getStoreValue('lastVisitAt'));
+  await device.checkNoVisitors(last + 30 * 60e3);
+  assert.equal(device.statEvents.length, 0);
+  await device.checkNoVisitors(last + 5 * 3600e3);
+  assert.equal(device.statEvents[0].name, 'no_visitors');
+  assert.equal(device.statEvents[0].tokens.hours, 5);
 });

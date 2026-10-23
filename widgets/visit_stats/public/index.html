@@ -22,6 +22,7 @@
     .row { margin-bottom: 7px; }
     .row .line { display: flex; justify-content: space-between; gap: 8px; }
     .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .hour { font-size: 12px; opacity: 0.6; }
     .row .bar { height: 5px; border-radius: 3px; margin-top: 3px; background: rgba(128, 128, 128, 0.18); }
     .row .bar b { display: block; height: 100%; border-radius: 3px; background: #2E7D32; }
     .empty { margin: auto; text-align: center; opacity: 0.65; padding: 0 16px; }
@@ -41,10 +42,12 @@
       const T = {
         en: { day: 'Day', week: 'Week', month: 'Month', year: 'Year', total: 'Total',
               visits: 'visits', empty: 'No identified visits counted yet. Turn on "Automatically identify birds" in the feeder settings.',
-              last14: 'last 14 days', kept: 'kept for' , months: 'months', forever: 'kept without limit' },
+              last14: 'last 14 days', kept: 'kept for' , months: 'months', forever: 'kept without limit',
+              around: 'around' },
         nl: { day: 'Dag', week: 'Week', month: 'Maand', year: 'Jaar', total: 'Totaal',
               visits: 'bezoeken', empty: 'Nog geen herkende bezoeken geteld. Zet "Vogels automatisch herkennen" aan in de instellingen van het voederhuisje.',
-              last14: 'laatste 14 dagen', kept: 'bewaard gedurende', months: 'maanden', forever: 'onbeperkt bewaard' },
+              last14: 'laatste 14 dagen', kept: 'bewaard gedurende', months: 'maanden', forever: 'onbeperkt bewaard',
+              around: 'rond' },
       }[lang];
 
       const PERIODS = ['day', 'week', 'month', 'year', 'total'];
@@ -102,7 +105,11 @@
         period.species.forEach(item => {
           const row = el('div', 'row');
           const line = el('div', 'line');
-          line.appendChild(el('span', 'name', item.name));
+          const name = el('span', 'name', item.name);
+          if (typeof item.hour === 'number') {
+            name.appendChild(el('span', 'hour', ' \u00b7 ' + T.around + ' ' + String(item.hour).padStart(2, '0') + ':00'));
+          }
+          line.appendChild(name);
           line.appendChild(el('span', 'count', String(item.count)));
           row.appendChild(line);
           const bar = el('div', 'bar');

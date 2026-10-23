@@ -3,14 +3,16 @@
 const Homey = require('homey');
 const BirdBuddyClient = require('../../lib/birdbuddy');
 const PostcardMonitor = require('../../lib/postcard-monitor');
-const { VisitStats, planBackfill } = require('../../lib/stats');
-const { translate, translateList, SUPPORTED } = require('../../lib/species-names');
+const { VisitStats, planBackfill, localHour, dayKey } = require('../../lib/stats');
+const { translate, translateList, isBird, SUPPORTED } = require('../../lib/species-names');
 
 const DEFAULT_INTERVAL_MIN = 15;
 const BACKFILL_RETRY_MS = 6 * 60 * 60 * 1000;
 const BACKFILL_PAUSE_MS = 250;
 const MAX_BACKFILL_MONTHS = 120;
 const BACKFILL_PARALLEL = 4;
+const TICK_MS = 5 * 60 * 1000;
+const HOUR_MS = 3600 * 1000;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class FeederDevice extends Homey.Device {
@@ -19,6 +21,7 @@ class FeederDevice extends Homey.Device {
     if (this.hasCapability('alarm_battery')) await this.removeCapability('alarm_battery');
     if (this.hasCapability('feeder_charging')) await this.removeCapability('feeder_charging');
     if (!this.hasCapability('last_species')) await this.addCapability('last_species');
+    if (!this.hasCapability('visits_today')) await this.addCapability('visits_today');
     await this.showLastSpecies();
 
     this.client = new BirdBuddyClient({
@@ -31,6 +34,8 @@ class FeederDevice extends Homey.Device {
       : 'Login storage: tokens only, no password stored');
 
     this.stats = new VisitStats(this.getStoreValue('visitStats'));
+    this.countNonBirds = this.getSetting('count_non_birds') === true;
+    this.stats.filter = name => this.countNonBirds || isBird(name);
     this.recorded = new Map();
     this.pendingRecords = [];
     this.backfilling = null;
@@ -82,6 +87,11 @@ class FeederDevice extends Homey.Device {
 
     await this.refresh();
     this.startPolling(this.getSetting('poll_interval'));
+
+    // Housekeeping every few minutes: the "visits today" value at midnight, the daily
+    // summary and the "no visitors" Flow.
+    this.tickTimer = this.homey.setInterval(() => this.tick().catch(err => this.error(`Tick: ${err.message}`)), TICK_MS);
+    await this.tick().catch(err => this.error(`Tick: ${err.message}`));
   }
 
   async saveTokens({ accessToken, refreshToken }) {
@@ -139,6 +149,10 @@ class FeederDevice extends Homey.Device {
   async onSettings({ newSettings, changedKeys }) {
     if (changedKeys.includes('poll_interval')) {
       this.startPolling(newSettings.poll_interval);
+    }
+    if (changedKeys.includes('count_non_birds')) {
+      this.countNonBirds = newSettings.count_non_birds === true;
+      await this.updateVisitsToday();
     }
     if (changedKeys.includes('species_language')) {
       await this.showLastSpecies(this.speciesLanguage(newSettings.species_language));
@@ -375,6 +389,56 @@ class FeederDevice extends Homey.Device {
       species ? translateList(species, language || this.speciesLanguage()) : this.homey.__('species.unknown'));
   }
 
+  async updateVisitsToday() {
+    const value = this.stats.total('day', Date.now(), this.timeZone());
+    if (this.getCapabilityValue && this.getCapabilityValue('visits_today') === value) return;
+    await this.setCapabilityValue('visits_today', value);
+  }
+
+  // Runs every few minutes (and once at startup).
+  async tick(now = Date.now()) {
+    await this.updateVisitsToday();
+    await this.sendSummaryIfDue(now);
+    await this.checkNoVisitors(now);
+  }
+
+  // Once a day, from the chosen hour on: the visits of that day, for a notification.
+  async sendSummaryIfDue(now) {
+    const zone = this.timeZone();
+    const today = dayKey(now, zone);
+    const hour = Number(this.getSetting('summary_hour'));
+    if (localHour(now, zone) < (Number.isFinite(hour) ? hour : 20)) return;
+    if (this.getStoreValue('summaryDay') === today) return;
+    await this.setStoreValue('summaryDay', today);
+    const rows = this.stats.counts('day', now, zone);
+    if (!rows.length) return;
+    await this.homey.flow.getDeviceTriggerCard('daily_summary').trigger(this, {
+      summary: rows.map(row => `${row.count}× ${this.speciesName(row.name)}`).join(', '),
+      total: rows.reduce((sum, row) => sum + row.count, 0),
+      species: rows.length,
+    });
+  }
+
+  // Offers the silence to every "no visitor for X hours" Flow; each Flow decides in
+  // shouldFireNoVisitors whether it is its turn.
+  async checkNoVisitors(now) {
+    const last = this.getStoreValue('lastVisitAt');
+    const since = (now - Date.parse(last)) / HOUR_MS;
+    if (!last || !Number.isFinite(since) || since < 1) return;
+    await this.homey.flow.getDeviceTriggerCard('no_visitors')
+      .trigger(this, { hours: Math.floor(since), last_visit: String(last) }, { hours: since, last });
+  }
+
+  // Each Flow fires once per silence: the same quiet period never fires it twice.
+  async shouldFireNoVisitors(hours, state) {
+    if (!(state.hours >= Number(hours))) return false;
+    const fired = { ...(this.getStoreValue('silenceFired') || {}) };
+    if (fired[String(hours)] === state.last) return false;
+    fired[String(hours)] = state.last;
+    await this.setStoreValue('silenceFired', fired);
+    return true;
+  }
+
   timeZone() {
     return this.homey.clock.getTimezone();
   }
@@ -388,6 +452,7 @@ class FeederDevice extends Homey.Device {
     this.stats.prune(this.getSetting('stats_retention_months'), Date.now(), this.timeZone());
     await this.setStoreValue('visitStats', this.stats.toJSON());
     this.recorded.set(card.id, results);
+    await this.updateVisitsToday().catch(err => this.error(err.message));
     // Only the latest few are needed: flows for a card run right after it is counted.
     if (this.recorded.size > 50) this.recorded.delete(this.recorded.keys().next().value);
   }
@@ -399,6 +464,7 @@ class FeederDevice extends Homey.Device {
     const zone = this.timeZone();
     const total = this.stats.total('total', now, zone);
     for (const result of results) {
+      if (!this.stats.visible(result.id)) continue; // for example a fly
       const count = this.stats.count(result.id, 'total', now, zone);
       const tokens = {
         species: this.speciesName(result.name),
@@ -409,6 +475,8 @@ class FeederDevice extends Homey.Device {
       await this.homey.flow.getDeviceTriggerCard('species_visited').trigger(this, tokens, state);
       await this.homey.flow.getDeviceTriggerCard('species_milestone')
         .trigger(this, { species: this.speciesName(result.name), count, total }, state);
+      await this.homey.flow.getDeviceTriggerCard('rare_visitor')
+        .trigger(this, { species: this.speciesName(result.name), count }, state);
       if (result.isNew) {
         await this.homey.flow.getDeviceTriggerCard('new_species')
           .trigger(this, { species: this.speciesName(result.name) }, state);
@@ -436,7 +504,7 @@ class FeederDevice extends Homey.Device {
       periods[period] = {
         total: this.stats.total(period, now, zone),
         species: this.stats.counts(period, now, zone).slice(0, 10)
-          .map(row => ({ ...row, name: this.speciesName(row.name) })),
+          .map(row => ({ ...row, name: this.speciesName(row.name), hour: this.stats.busiestHour(row.id) })),
       };
     }
     return {
@@ -455,6 +523,7 @@ class FeederDevice extends Homey.Device {
 
   async onDeleted() {
     this.homey.clearInterval(this.pollTimer);
+    this.homey.clearInterval(this.tickTimer);
   }
 }
 

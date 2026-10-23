@@ -6,7 +6,8 @@
   "class": "sensor",
   "capabilities": [
     "measure_battery",
-    "last_species"
+    "last_species",
+    "visits_today"
   ],
   "energy": {
     "batteries": [
@@ -142,6 +143,38 @@
           "units": {
             "en": "months",
             "nl": "maanden"
+          }
+        },
+        {
+          "id": "count_non_birds",
+          "type": "checkbox",
+          "label": {
+            "en": "Also count things that are not birds",
+            "nl": "Ook dingen tellen die geen vogel zijn"
+          },
+          "hint": {
+            "en": "Bird Buddy sometimes recognises a fly. These are left out of the statistics unless you tick this.",
+            "nl": "Bird Buddy herkent soms een vlieg. Die laat de app weg uit de statistieken, tenzij je dit aanvinkt."
+          },
+          "value": false
+        },
+        {
+          "id": "summary_hour",
+          "type": "number",
+          "label": {
+            "en": "Send the daily summary at",
+            "nl": "Dagoverzicht sturen om"
+          },
+          "hint": {
+            "en": "The hour of the day (0-23, Homey time) at which the Flow trigger \"Daily summary is ready\" fires.",
+            "nl": "Het uur van de dag (0-23, tijd van je Homey) waarop de Flow-trigger \"Het dagoverzicht is klaar\" afgaat."
+          },
+          "value": 20,
+          "min": 0,
+          "max": 23,
+          "units": {
+            "en": "o'clock",
+            "nl": "uur"
           }
         },
         {

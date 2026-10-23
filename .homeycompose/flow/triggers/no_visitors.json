@@ -1,0 +1,24 @@
+{
+  "title": { "en": "No visitors for a while", "nl": "Al een tijd geen bezoekers" },
+  "titleFormatted": {
+    "en": "No visitor for [[hours]] hours",
+    "nl": "Al [[hours]] uur geen bezoeker"
+  },
+  "hint": {
+    "en": "Triggers once when no bird has visited for the given number of hours, for example to remind you to refill the feeder. Birds usually stay away at night, so choose a long period. Triggers again after the next visit.",
+    "nl": "Gaat één keer af wanneer er het opgegeven aantal uren geen vogel langskwam, bijvoorbeeld als herinnering om het voederhuisje bij te vullen. 's Nachts komen er meestal geen vogels, kies dus een lange periode. Gaat opnieuw af na het volgende bezoek."
+  },
+  "tokens": [
+    { "name": "hours", "type": "number", "title": { "en": "Hours without a visit", "nl": "Uren zonder bezoek" }, "example": 24 },
+    { "name": "last_visit", "type": "string", "title": { "en": "Time of the last visit", "nl": "Tijdstip laatste bezoek" }, "example": "2026-10-22T08:15:00.000Z" }
+  ],
+  "args": [
+    { "type": "device", "name": "device", "filter": "driver_id=feeder" },
+    {
+      "type": "number", "name": "hours",
+      "title": { "en": "Hours", "nl": "Uren" },
+      "placeholder": { "en": "24", "nl": "24" },
+      "min": 1, "max": 720, "step": 1
+    }
+  ]
+}

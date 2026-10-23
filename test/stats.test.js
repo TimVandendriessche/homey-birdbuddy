@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { VisitStats, dayKey, weekStart, planBackfill, localMidnight } = require('../lib/stats');
+const { VisitStats, dayKey, weekStart, planBackfill, localMidnight, localHour } = require('../lib/stats');
 
 const TZ = 'Europe/Brussels';
 const robin = { id: 'robin', name: 'European Robin' };
@@ -132,4 +132,34 @@ test('backfill replaces the numbers, and older visits are then not counted twice
   assert.equal(stats.record(card('y', '2026-10-23T09:01:00Z', robin), TZ).length, 1);
   assert.equal(stats.count('robin', 'day', NOW, TZ), 4);
   assert.equal(stats.count('robin', 'year', NOW, TZ), 44);
+});
+
+test('localHour is the hour in the given time zone', () => {
+  assert.equal(localHour('2026-10-23T06:30:00Z', TZ), 8); // CEST
+  assert.equal(localHour('2026-12-01T06:30:00Z', TZ), 7); // CET
+  assert.equal(localHour('2026-10-23T22:30:00Z', TZ), 0);
+});
+
+test('the filter hides species from counts, totals, lists and the daily series', () => {
+  const stats = new VisitStats();
+  const fly = { id: 'fly', name: 'Fly' };
+  stats.record(card('1', '2026-10-23T07:00:00Z', robin), TZ);
+  stats.record(card('2', '2026-10-23T07:05:00Z', fly), TZ);
+  stats.filter = name => name !== 'Fly';
+  assert.deepEqual(stats.counts('total', NOW, TZ).map(row => row.id), ['robin']);
+  assert.equal(stats.total('day', NOW, TZ), 1);
+  assert.deepEqual(stats.speciesList().map(row => row.id), ['robin']);
+  assert.equal(stats.daily(1, NOW, TZ)[0].count, 1);
+  stats.filter = () => true;
+  assert.equal(stats.total('day', NOW, TZ), 2);
+});
+
+test('the busiest hour needs enough visits and is stored as an hour of the day', () => {
+  const stats = new VisitStats();
+  for (let i = 0; i < 9; i += 1) stats.record(card(`m${i}`, '2026-10-20T06:10:00Z', robin), TZ); // 08:xx local
+  assert.equal(stats.busiestHour('robin'), null, 'only 9 visits');
+  stats.record(card('m9', '2026-10-21T06:20:00Z', robin), TZ);
+  stats.record(card('x', '2026-10-21T15:20:00Z', robin), TZ);
+  assert.equal(stats.busiestHour('robin'), 8);
+  assert.equal(stats.busiestHour('unknown'), null);
 });

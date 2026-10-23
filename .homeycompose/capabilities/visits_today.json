@@ -1,0 +1,10 @@
+{
+  "type": "number",
+  "title": { "en": "Visits today", "nl": "Bezoeken vandaag" },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "decimals": 0,
+  "insights": true,
+  "icon": "/assets/last_species.svg"
+}

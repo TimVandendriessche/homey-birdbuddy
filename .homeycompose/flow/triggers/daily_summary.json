@@ -1,0 +1,13 @@
+{
+  "title": { "en": "Daily summary is ready", "nl": "Het dagoverzicht is klaar" },
+  "hint": {
+    "en": "Triggers once a day at the hour set in the feeder settings, with the visits of that day, for example to send a notification. Does not trigger on a day without visits.",
+    "nl": "Gaat één keer per dag af op het uur dat je in de instellingen van het voederhuisje kiest, met de bezoeken van die dag, bijvoorbeeld om een melding te sturen. Gaat niet af op een dag zonder bezoeken."
+  },
+  "tokens": [
+    { "name": "summary", "type": "string", "title": { "en": "Summary", "nl": "Overzicht" }, "example": "12× Great Tit, 3× European Robin" },
+    { "name": "total", "type": "number", "title": { "en": "Visits today", "nl": "Bezoeken vandaag" }, "example": 15 },
+    { "name": "species", "type": "number", "title": { "en": "Different species", "nl": "Verschillende soorten" }, "example": 2 }
+  ],
+  "args": [{ "type": "device", "name": "device", "filter": "driver_id=feeder" }]
+}

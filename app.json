@@ -1,7 +1,7 @@
 {
   "_comment": "This file is generated. Please edit .homeycompose/app.json instead.",
   "id": "community.birdbuddy",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "compatibility": ">=12.3.0",
   "sdk": 3,
   "platforms": [
@@ -72,6 +72,53 @@
       },
       {
         "title": {
+          "en": "Daily summary is ready",
+          "nl": "Het dagoverzicht is klaar"
+        },
+        "hint": {
+          "en": "Triggers once a day at the hour set in the feeder settings, with the visits of that day, for example to send a notification. Does not trigger on a day without visits.",
+          "nl": "Gaat één keer per dag af op het uur dat je in de instellingen van het voederhuisje kiest, met de bezoeken van die dag, bijvoorbeeld om een melding te sturen. Gaat niet af op een dag zonder bezoeken."
+        },
+        "tokens": [
+          {
+            "name": "summary",
+            "type": "string",
+            "title": {
+              "en": "Summary",
+              "nl": "Overzicht"
+            },
+            "example": "12× Great Tit, 3× European Robin"
+          },
+          {
+            "name": "total",
+            "type": "number",
+            "title": {
+              "en": "Visits today",
+              "nl": "Bezoeken vandaag"
+            },
+            "example": 15
+          },
+          {
+            "name": "species",
+            "type": "number",
+            "title": {
+              "en": "Different species",
+              "nl": "Verschillende soorten"
+            },
+            "example": 2
+          }
+        ],
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=feeder"
+          }
+        ],
+        "id": "daily_summary"
+      },
+      {
+        "title": {
           "en": "A new bird species was seen",
           "nl": "Een nieuwe vogelsoort is gezien"
         },
@@ -98,6 +145,120 @@
           }
         ],
         "id": "new_species"
+      },
+      {
+        "title": {
+          "en": "No visitors for a while",
+          "nl": "Al een tijd geen bezoekers"
+        },
+        "titleFormatted": {
+          "en": "No visitor for [[hours]] hours",
+          "nl": "Al [[hours]] uur geen bezoeker"
+        },
+        "hint": {
+          "en": "Triggers once when no bird has visited for the given number of hours, for example to remind you to refill the feeder. Birds usually stay away at night, so choose a long period. Triggers again after the next visit.",
+          "nl": "Gaat één keer af wanneer er het opgegeven aantal uren geen vogel langskwam, bijvoorbeeld als herinnering om het voederhuisje bij te vullen. 's Nachts komen er meestal geen vogels, kies dus een lange periode. Gaat opnieuw af na het volgende bezoek."
+        },
+        "tokens": [
+          {
+            "name": "hours",
+            "type": "number",
+            "title": {
+              "en": "Hours without a visit",
+              "nl": "Uren zonder bezoek"
+            },
+            "example": 24
+          },
+          {
+            "name": "last_visit",
+            "type": "string",
+            "title": {
+              "en": "Time of the last visit",
+              "nl": "Tijdstip laatste bezoek"
+            },
+            "example": "2026-10-22T08:15:00.000Z"
+          }
+        ],
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=feeder"
+          },
+          {
+            "type": "number",
+            "name": "hours",
+            "title": {
+              "en": "Hours",
+              "nl": "Uren"
+            },
+            "placeholder": {
+              "en": "24",
+              "nl": "24"
+            },
+            "min": 1,
+            "max": 720,
+            "step": 1
+          }
+        ],
+        "id": "no_visitors"
+      },
+      {
+        "title": {
+          "en": "A rare bird visited",
+          "nl": "Een zeldzame vogel kwam langs"
+        },
+        "titleFormatted": {
+          "en": "A species visited that was seen at most [[times]] times",
+          "nl": "Een soort kwam langs die hoogstens [[times]] keer is gezien"
+        },
+        "hint": {
+          "en": "Triggers when a species visits that you have seen only a few times, counting this visit. Counts cover the period set in the feeder settings.",
+          "nl": "Gaat af wanneer een soort langskomt die je pas een paar keer zag, dit bezoek meegeteld. De tellers omvatten de periode die je in de instellingen van het voederhuisje kiest."
+        },
+        "tokens": [
+          {
+            "name": "species",
+            "type": "string",
+            "title": {
+              "en": "Bird species",
+              "nl": "Vogelsoort"
+            },
+            "example": "Hawfinch"
+          },
+          {
+            "name": "count",
+            "type": "number",
+            "title": {
+              "en": "Times seen",
+              "nl": "Aantal keer gezien"
+            },
+            "example": 2
+          }
+        ],
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=feeder"
+          },
+          {
+            "type": "number",
+            "name": "times",
+            "title": {
+              "en": "At most",
+              "nl": "Hoogstens"
+            },
+            "placeholder": {
+              "en": "3",
+              "nl": "3"
+            },
+            "min": 1,
+            "max": 1000,
+            "step": 1
+          }
+        ],
+        "id": "rare_visitor"
       },
       {
         "title": {
@@ -327,7 +488,8 @@
       "class": "sensor",
       "capabilities": [
         "measure_battery",
-        "last_species"
+        "last_species",
+        "visits_today"
       ],
       "energy": {
         "batteries": [
@@ -496,6 +658,38 @@
               }
             },
             {
+              "id": "count_non_birds",
+              "type": "checkbox",
+              "label": {
+                "en": "Also count things that are not birds",
+                "nl": "Ook dingen tellen die geen vogel zijn"
+              },
+              "hint": {
+                "en": "Bird Buddy sometimes recognises a fly. These are left out of the statistics unless you tick this.",
+                "nl": "Bird Buddy herkent soms een vlieg. Die laat de app weg uit de statistieken, tenzij je dit aanvinkt."
+              },
+              "value": false
+            },
+            {
+              "id": "summary_hour",
+              "type": "number",
+              "label": {
+                "en": "Send the daily summary at",
+                "nl": "Dagoverzicht sturen om"
+              },
+              "hint": {
+                "en": "The hour of the day (0-23, Homey time) at which the Flow trigger \"Daily summary is ready\" fires.",
+                "nl": "Het uur van de dag (0-23, tijd van je Homey) waarop de Flow-trigger \"Het dagoverzicht is klaar\" afgaat."
+              },
+              "value": 20,
+              "min": 0,
+              "max": 23,
+              "units": {
+                "en": "o'clock",
+                "nl": "uur"
+              }
+            },
+            {
               "id": "stats_reimport",
               "type": "checkbox",
               "label": {
@@ -582,6 +776,19 @@
       "getable": true,
       "setable": false,
       "uiComponent": "sensor",
+      "icon": "/assets/last_species.svg"
+    },
+    "visits_today": {
+      "type": "number",
+      "title": {
+        "en": "Visits today",
+        "nl": "Bezoeken vandaag"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor",
+      "decimals": 0,
+      "insights": true,
       "icon": "/assets/last_species.svg"
     }
   }

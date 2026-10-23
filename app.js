@@ -29,6 +29,12 @@ class BirdBuddyApp extends Homey.App {
       return args.species.id === state.id && state.count % every === 0;
     });
 
+    this.homey.flow.getDeviceTriggerCard('rare_visitor')
+      .registerRunListener(async (args, state) => state.count <= Math.floor(Number(args.times)));
+
+    this.homey.flow.getDeviceTriggerCard('no_visitors')
+      .registerRunListener(async (args, state) => args.device.shouldFireNoVisitors(args.hours, state));
+
     this.log('Bird Buddy (unofficial) started');
   }
 }
